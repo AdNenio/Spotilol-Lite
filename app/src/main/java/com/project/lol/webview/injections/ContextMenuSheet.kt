@@ -9,10 +9,26 @@ object ContextMenuSheet {
             var STYLE_ID = 'spl-ctxsheet-style';
             var HEAD_CLS = 'spl-sheet-head';
             var S = '[data-tippy-root]:has(ul[role="menu"])';
+            var LIKE = S + ' ul[role="menu"] button.spl-sheet-like';
             var menuObserver = null;
             var menuTarget = null;
             var activeTrigger = null;
+            var lastTrigger = null;
             var timer = null;
+            var sheetOpen = false;
+
+            function rememberTrigger(e){
+                var t = e.target;
+                if (!t || !t.closest) return;
+                if (t.closest('[data-tippy-root]')) return;
+                lastTrigger = t.closest('button') || t;
+            }
+
+            function notify(open){
+                if (open === sheetOpen) return;
+                sheetOpen = open;
+                try { if (window.AndBridge && window.AndBridge.ctxMenuState) window.AndBridge.ctxMenuState(open); } catch(e){}
+            }
 
             function injectStyle(){
                 if (document.getElementById(STYLE_ID)) return;
@@ -31,8 +47,8 @@ object ContextMenuSheet {
                     '.spl-sheet-meta{flex:1;min-width:0}' +
                     '.spl-sheet-title{font-size:15px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}' +
                     '.spl-sheet-artist{font-size:12px;color:rgba(255,255,255,.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}' +
-                    '.spl-sheet-like{width:40px;height:40px;flex-shrink:0;border:0;background:none;padding:0;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.7);cursor:pointer}' +
-                    '.spl-sheet-like svg{width:22px;height:22px}' +
+                    LIKE + '{width:40px!important;height:40px!important;min-height:0!important;max-height:none!important;flex-shrink:0;border:0;background:none;padding:0!important;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.7);cursor:pointer}' +
+                    LIKE + ' svg{width:24px!important;height:24px!important;flex-shrink:0}' +
                     '.spl-sheet-like svg path{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round}' +
                     '.spl-sheet-like.spl-on{color:var(--spl-accent,#1db954)}' +
                     '.spl-sheet-like.spl-on svg path{fill:currentColor;stroke:none}' +
@@ -45,6 +61,12 @@ object ContextMenuSheet {
                 var cm = menuEl();
                 if (!cm) return null;
                 return cm.querySelector('ul[role="menu"][data-depth="0"]');
+            }
+            function openMenu(){
+                var subs = document.querySelectorAll('ul[role="menu"][data-depth="0"]');
+                if (subs.length) return subs[subs.length - 1];
+                var all = document.querySelectorAll('ul[role="menu"]');
+                return all.length ? all[all.length - 1] : null;
             }
             function scrollerOf(panel){
                 if (!panel) return null;
@@ -59,7 +81,7 @@ object ContextMenuSheet {
                 }
             }
             function triggerEl(){
-                return document.querySelector('button[data-context-menu-open="true"]');
+                return document.querySelector('[data-context-menu-open="true"]');
             }
             function trackRow(){
                 var t = triggerEl();
@@ -130,8 +152,10 @@ object ContextMenuSheet {
             }
             function ensure(){
                 var ul = sheetUl();
-                if (!ul) { removeHead(); activeTrigger = null; return; }
-                activeTrigger = triggerEl();
+                if (!ul && !openMenu()) { removeHead(); activeTrigger = null; notify(false); return; }
+                notify(true);
+                activeTrigger = triggerEl() || lastTrigger;
+                if (!ul) { removeHead(); return; }
                 var d = trackInfo();
                 if (!d) { removeHead(); return; }
                 var head = ul.querySelector('.' + HEAD_CLS);
@@ -154,8 +178,9 @@ object ContextMenuSheet {
             }
 
             function closeSheet(){
-                var t = activeTrigger || triggerEl();
-                if (t) fire(t);
+                var t = activeTrigger || triggerEl() || lastTrigger;
+                if (t && document.contains(t)) { fire(t); return; }
+                notify(false);
             }
             function attachDrag(panel){
                 if (!panel || panel.__splDrag) return;
@@ -244,7 +269,8 @@ object ContextMenuSheet {
                 timer = setTimeout(function(){ timer = null; stampSubmenus(); ensure(); watchMenu(); }, 120);
             }
             function watchMenu(){
-                var cm = menuEl();
+                var m = openMenu();
+                var cm = menuEl() || (m ? m.closest('[data-tippy-root]') : null);
                 if (!cm) {
                     if (menuObserver) { menuObserver.disconnect(); menuObserver = null; menuTarget = null; }
                     return;
@@ -257,6 +283,8 @@ object ContextMenuSheet {
                 menuObserver.observe(cm, {childList: true, subtree: true});
             }
 
+            window.__splCloseCtxSheet = closeSheet;
+            document.addEventListener('pointerdown', rememberTrigger, true);
             injectStyle();
             if (window.MutationObserver) {
                 var bodyObserver = new MutationObserver(schedule);

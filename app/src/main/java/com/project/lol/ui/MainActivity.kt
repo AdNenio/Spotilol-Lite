@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.app.PictureInPictureParams
 import android.app.RemoteAction
+import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.ActivityInfo
@@ -67,10 +68,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -95,11 +96,8 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.webkit.WebViewCompat
-import androidx.webkit.WebViewFeature
 import com.google.firebase.analytics.FirebaseAnalytics
 import com.project.lol.R
-import com.project.lol.bridge.OriginScopedBridge
-import com.project.lol.security.WebSecurityPolicy
 import com.project.lol.bridge.SpotifyBridge
 import com.project.lol.offline.DownloadManager
 import com.project.lol.profile.ProfileManager
@@ -107,16 +105,15 @@ import com.project.lol.service.MediaNotificationService
 import com.project.lol.timer.AppQuit
 import com.project.lol.timer.SleepTimerAction
 import com.project.lol.timer.SleepTimerManager
-import com.project.lol.ui.components.ChangelogDialog
 import com.project.lol.ui.components.SettingsDialog
 import com.project.lol.ui.components.SleepTimerDialog
 import com.project.lol.ui.theme.SpotifyTheme
+import com.project.lol.ui.theme.ThemeController
+import com.project.lol.ui.theme.ThemePresets
 import com.project.lol.util.BuildInfo
-import com.project.lol.util.ChangelogPrefs
 import com.project.lol.util.Logger
 import com.project.lol.util.UpdateChecker
-import com.project.lol.webview.SpotifyWebChromeClient
-import com.project.lol.webview.SpotifyWebViewClient
+import com.project.lol.webview.WebViewHost
 import com.project.lol.webview.helpers.DevLogPrelude
 import com.project.lol.webview.helpers.LyricsTheme
 import com.project.lol.webview.helpers.buildAmoledJs
@@ -135,31 +132,20 @@ import androidx.core.graphics.scale
 import androidx.core.graphics.toColorInt
 import com.project.lol.ui.components.ErrorScreen
 import com.project.lol.ui.components.mapWebViewError
-import com.project.lol.webview.helpers.AccentTheme
+import com.project.lol.util.AppLocale
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
-class MainActivity : ComponentActivity() {
+class MainActivity : ComponentActivity(), WebViewHost.UiHost {
 
     companion object {
         private const val TAG = "main"
     }
 
-    private var webView: WebView? = null
-    private var pendingMediaSearch: String? = null
+    private val webView: WebView?
+        get() = WebViewHost.webView
 
-    private fun captureMediaSearch(intent: Intent): Boolean {
-        if (intent.action != "android.media.action.MEDIA_PLAY_FROM_SEARCH") return false
-        pendingMediaSearch = intent.getStringExtra(android.app.SearchManager.QUERY).orEmpty().take(1024)
-        return true
-    }
-
-    private fun playPendingSearch(view: WebView) {
-        if (!WebSecurityPolicy.isPlayer(view.url)) return
-        val query = pendingMediaSearch ?: return
-        pendingMediaSearch = null
-        view.evaluateJavascript(com.project.lol.service.MediaSearch.playSearchScript(query), null)
-    }
+    private val webViewGeneration = mutableIntStateOf(0)
     private var serviceStarted = false
     @Volatile private var pipCoverBitmap: Bitmap? = null
     @Volatile private var pipPlaying = false
@@ -182,7 +168,7 @@ class MainActivity : ComponentActivity() {
     private val wideVideoState = mutableStateOf(false)
     private val videoFullscreenState = mutableStateOf(false)
     private val keepScreenOnState = mutableStateOf(false)
-    private val paletteSeedState = mutableStateOf<String?>(null)
+    private val themePresetState = mutableStateOf(ThemePresets.DEFAULT_ID)
 
     private val showSleepTimerDialog = mutableStateOf(false)
     private val sleepTimerInputText = mutableStateOf("")
@@ -192,10 +178,25 @@ class MainActivity : ComponentActivity() {
     private val blockServiceWorkerState = mutableStateOf(true)
     private val webViewError = mutableStateOf<Pair<Int, String>?>(null)
     private var pendingLink: String? = null
+    private var pendingMediaSearch: String? = null
+
+    private fun isPlayerUrl(url: String?): Boolean =
+        url != null && (url == "https://open.spotify.com" || url.startsWith("https://open.spotify.com/"))
+
+    private fun captureMediaSearch(intent: Intent): Boolean {
+        if (intent.action != "android.media.action.MEDIA_PLAY_FROM_SEARCH") return false
+        pendingMediaSearch = intent.getStringExtra(android.app.SearchManager.QUERY).orEmpty().take(1024)
+        return true
+    }
+
+    private fun playPendingSearch(view: WebView) {
+        if (!isPlayerUrl(view.url)) return
+        val query = pendingMediaSearch ?: return
+        pendingMediaSearch = null
+        view.evaluateJavascript(com.project.lol.service.MediaSearch.playSearchScript(query), null)
+    }
 
     private lateinit var prefs: SharedPreferences
-
-    private var changelogOnUpdate = false
 
     private val analytics: FirebaseAnalytics by lazy { FirebaseAnalytics.getInstance(this) }
 
@@ -219,8 +220,6 @@ class MainActivity : ComponentActivity() {
         SleepTimerManager.loadAction(this)
         sleepTimerState.value = SleepTimerManager.state()
 
-        changelogOnUpdate = ChangelogPrefs.shouldShowOnUpdate(this)
-
         if ((applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
             WebView.setWebContentsDebuggingEnabled(true)
         }
@@ -243,7 +242,7 @@ class MainActivity : ComponentActivity() {
         hideTopBarState.value = prefs.getBoolean("HideTopBar", false)
         landscapeModeState.value = prefs.getBoolean("LandscapeMode", false)
         keepScreenOnState.value = prefs.getBoolean("KeepScreenOn", false)
-        paletteSeedState.value = prefs.getString("PaletteSeed", null)
+        themePresetState.value = prefs.getString("ThemePreset", ThemePresets.DEFAULT_ID) ?: ThemePresets.DEFAULT_ID
         blockServiceWorkerState.value = prefs.getBoolean("BlockServiceWorker", true)
         applyOrientation()
         applyKeepScreenOn()
@@ -268,7 +267,7 @@ class MainActivity : ComponentActivity() {
             val hideTopBar = hideTopBarState.value
             val landscapeMode = landscapeModeState.value
             val keepScreenOn = keepScreenOnState.value
-            val paletteSeed = paletteSeedState.value
+            val themePreset = themePresetState.value
             val showDialog = showSleepTimerDialog.value
             val loadProgress = loadingProgress.intValue
             val blockServiceWorker = blockServiceWorkerState.value
@@ -289,24 +288,23 @@ class MainActivity : ComponentActivity() {
 
             var settingsDialogOpen by remember { mutableStateOf(false) }
             var playerExpanded by remember { mutableStateOf(false) }
+            var ctxSheetOpen by remember { mutableStateOf(false) }
             var showMiniMenu by remember { mutableStateOf(false) }
-            var showChangelog by rememberSaveable { mutableStateOf(changelogOnUpdate) }
             val versionName = remember {
                 runCatching { packageManager.getPackageInfo(packageName, 0).versionName }
                     .getOrNull() ?: ""
             }
-            val seedColor = paletteSeed?.let { hex ->
-                runCatching { Color(android.graphics.Color.parseColor(hex)) }.getOrNull()
-            }
-            val accentColor = remember(materialYou, paletteSeed) {
-                AccentTheme.resolveColor(this@MainActivity)
-            }
+            val accentColor = MaterialTheme.colorScheme.primary
 
             BackHandler(
-                enabled = settingsDialogOpen || videoFullscreenState.value || playerExpanded || webView?.canGoBack() == true
+                enabled = settingsDialogOpen || ctxSheetOpen || videoFullscreenState.value || playerExpanded || webView?.canGoBack() == true
             ) {
                 when {
                     settingsDialogOpen -> settingsDialogOpen = false
+                    ctxSheetOpen -> {
+                        ctxSheetOpen = false
+                        webView?.evaluateJavascript("window.__splCloseCtxSheet&&window.__splCloseCtxSheet()", null)
+                    }
                     videoFullscreenState.value -> {
                         webView?.evaluateJavascript("window.__splVfsExit&&window.__splVfsExit()", null)
                         exitVideoFullscreenMode()
@@ -319,13 +317,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            SpotifyTheme(useDynamicColor = materialYou, amoled = amoled, seedColor = seedColor) {
-                if (showChangelog) {
-                    ChangelogDialog(onDismiss = {
-                        showChangelog = false
-                        ChangelogPrefs.markShown(this@MainActivity)
-                    })
-                }
+            SpotifyTheme {
                 SettingsDialog(
                     visible = settingsDialogOpen,
                     onClose = { settingsDialogOpen = false },
@@ -333,12 +325,12 @@ class MainActivity : ComponentActivity() {
                     materialYou = materialYou,
                     onMaterialYouChange = { enabled ->
                         materialYouState.value = enabled
-                        prefs.edit().putBoolean("MaterialYou", enabled).apply()
+                        ThemeController.updateDynamicColor(enabled)
                     },
                     amoledThemeState = amoled,
                     onAmoledThemeChange = { enabled ->
                         amoledState.value = enabled
-                        prefs.edit().putBoolean("AmoledTheme", enabled).apply()
+                        ThemeController.updateAmoled(enabled)
                     },
                     hideTopBar = hideTopBar,
                     onHideTopBarChange = { enabled ->
@@ -357,14 +349,10 @@ class MainActivity : ComponentActivity() {
                         prefs.edit().putBoolean("KeepScreenOn", enabled).apply()
                         applyKeepScreenOn()
                     },
-                    paletteSeed = paletteSeed,
-                    onPaletteSeedChange = { hex ->
-                        paletteSeedState.value = hex
-                        if (hex.isNullOrBlank()) {
-                            prefs.edit().remove("PaletteSeed").apply()
-                        } else {
-                            prefs.edit().putString("PaletteSeed", hex).apply()
-                        }
+                    themePreset = themePreset,
+                    onThemePresetChange = { id ->
+                        themePresetState.value = id
+                        ThemeController.updatePreset(id)
                     },
                     onOfflineModeChange = { switchOfflineMode(it) },
                     onSaveProfile = { name, cookies -> saveProfile(name, cookies) },
@@ -372,6 +360,7 @@ class MainActivity : ComponentActivity() {
                     onDeleteProfile = { name -> deleteProfile(name) },
                     onClearCache = { clearWebViewCache() },
                     onClearData = { clearAllData() },
+                    onClearThirdParty = { clearThirdPartyLogins() },
                     onDebugToggle = { enabled ->
                         webView?.evaluateJavascript(
                             if (enabled) DevLogPrelude.js()
@@ -449,9 +438,8 @@ class MainActivity : ComponentActivity() {
                                 .padding(if (videoFullscreen) PaddingValues(0.dp) else innerPadding)
                         ) {
                             if (serviceEnabled) {
-                            val bridge = remember {
-                                SpotifyBridge(WeakReference(this@MainActivity))
-                            }
+                            val bridge = WebViewHost.bridgeFor(this@MainActivity)
+                            bridge.rebind(WeakReference(this@MainActivity))
 
                             bridge.onTimerDialogRequest = {
                                 showSleepTimerDialog.value = true
@@ -485,6 +473,8 @@ class MainActivity : ComponentActivity() {
                             }
 
                             bridge.onPlayerExpanded = { playerExpanded = it }
+
+                            bridge.onCtxMenuState = { ctxSheetOpen = it }
 
                             bridge.onWideVideo = {
                                 wideVideoState.value = it
@@ -527,96 +517,33 @@ class MainActivity : ComponentActivity() {
                                 DownloadManager.downloadCollection(this@MainActivity, payload)
                             }
 
-                            AndroidView(
-                                factory = { context ->
-                                    WebView(context).apply {
-                                        layoutParams = ViewGroup.LayoutParams(
-                                            ViewGroup.LayoutParams.MATCH_PARENT,
-                                            ViewGroup.LayoutParams.MATCH_PARENT
-                                        )
-
-                                        webView = this
-
-                                        setLayerType(View.LAYER_TYPE_HARDWARE, null)
-
-                                        settings.apply {
-                                            userAgentString = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
-                                            javaScriptEnabled = true
-                                            domStorageEnabled = true
-                                            useWideViewPort = true
-                                            loadWithOverviewMode = true
-                                            setSupportZoom(true)
-                                            builtInZoomControls = true
-                                            displayZoomControls = false
-                                            allowFileAccess = false
-                                            allowContentAccess = false
-                                            mediaPlaybackRequiresUserGesture = false
-                                            setSupportMultipleWindows(true)
-                                            javaScriptCanOpenWindowsAutomatically = true
-                                            cacheMode = android.webkit.WebSettings.LOAD_DEFAULT
-                                            setGeolocationEnabled(false)
-                                            @Suppress("DEPRECATION")
-                                            saveFormData = false
-                                            mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                            key(webViewGeneration.intValue) {
+                                AndroidView(
+                                    factory = { context ->
+                                        FrameLayout(context).apply {
+                                            layoutParams = ViewGroup.LayoutParams(
+                                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                                ViewGroup.LayoutParams.MATCH_PARENT
+                                            )
+                                            val hosted = WebViewHost.ensure(context)
+                                            (hosted.parent as? ViewGroup)?.removeView(hosted)
+                                            addView(
+                                                hosted,
+                                                ViewGroup.LayoutParams(
+                                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                                    ViewGroup.LayoutParams.MATCH_PARENT
+                                                )
+                                            )
                                         }
-
-                                        setInitialScale(100)
-                                        setBackgroundColor(0xFF000000.toInt())
-
-                                        if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER) ||
-                                            !WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
-                                            webViewError.value = -1 to "Update Android System WebView to use the secure player bridge"
-                                            return@apply
-                                        }
-                                        OriginScopedBridge.install(this, bridge)
-                                        webChromeClient = SpotifyWebChromeClient(
-                                            onProgressChanged = { progress ->
-                                                loadingProgress.intValue = progress
-                                            },
-                                            onShowCustomView = { view, callback ->
-                                                handleCustomViewShown(view, callback)
-                                            },
-                                            onHideCustomView = {
-                                                handleCustomViewHidden()
-                                            }
-                                        )
-
-                                        val spotifyClient = SpotifyWebViewClient(
-                                            onPlayerReady = { playPendingSearch(it) },
-                                            onLoginRequired = {
-                                                loadUrl("https://accounts.spotify.com/login")
-                                            },
-                                            onRenderProcessGone = {
-                                                runOnUiThread {
-                                                    webViewError.value = null
-                                                    destroyWebView()
-                                                }
-                                            },
-                                            onWebViewError = { code, desc ->
-                                                webViewError.value = code to desc
-                                            }
-                                        )
-                                        webViewClient = spotifyClient
-                                        // Before the first loadUrl, so it applies to the first page.
-                                        spotifyClient.installDocumentStartScripts(this)
-
-                                        val target = pendingLink
-                                            ?: if (loggedIn) "https://open.spotify.com/"
-                                            else "https://accounts.spotify.com/login"
-                                        pendingLink = null
-                                        Logger.i(
-                                            TAG,
-                                            "webview ready: js=on dom=on multiWindow=on bfcache=" +
-                                                WebViewFeature.isFeatureSupported(WebViewFeature.BACK_FORWARD_CACHE) +
-                                                " target=$target"
-                                        )
-                                        loadUrl(target)
-                                    }
-                                },
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(MaterialTheme.colorScheme.background)
-                            )
+                                    },
+                                    onRelease = { frame ->
+                                        frame.removeAllViews()
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(MaterialTheme.colorScheme.background)
+                                )
+                            }
 
                             LaunchedEffect(webView) {
                                 webView?.let { startMediaService() }
@@ -728,8 +655,9 @@ class MainActivity : ComponentActivity() {
 
     private fun extractSpotifyLink(intent: Intent?): String? {
         val uri = intent?.data ?: return null
-        val url = uri.toString()
-        return url.takeIf(WebSecurityPolicy::isDeepLink)
+        val host = uri.host ?: return null
+        val accepted = host == "spotify.link" || host.endsWith("spotify.com")
+        return if (accepted) uri.toString() else null
     }
 
     private fun setServiceEnabled(newValue: Boolean) {
@@ -763,11 +691,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun saveProfile(name: String, cookies: String) {
-        Logger.i(TAG, "saving account profile")
-        if (runCatching { ProfileManager.saveProfile(this, name, cookies) }.isFailure) {
-            Toast.makeText(this, getString(R.string.main_profile_save_failed), Toast.LENGTH_LONG).show()
-            return
-        }
+        Logger.i(TAG, "saving account profile: $name")
+        ProfileManager.saveProfile(this, name, cookies)
         Toast.makeText(this, getString(R.string.main_account_saved), Toast.LENGTH_SHORT).show()
     }
 
@@ -786,11 +711,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun deleteProfile(name: String) {
-        Logger.i(TAG, "deleting account profile")
-        if (runCatching { ProfileManager.deleteProfile(this, name) }.isFailure) {
-            Toast.makeText(this, getString(R.string.main_profile_delete_failed), Toast.LENGTH_LONG).show()
-            return
-        }
+        Logger.i(TAG, "deleting account profile: $name")
+        ProfileManager.deleteProfile(this, name)
         Toast.makeText(this, getString(R.string.main_profile_deleted), Toast.LENGTH_SHORT).show()
     }
 
@@ -820,6 +742,18 @@ class MainActivity : ComponentActivity() {
         }
         startActivity(intent)
         finish()
+    }
+
+    private fun clearThirdPartyLogins() {
+        Logger.w(TAG, "clearing third-party login sessions")
+        val session = ProfileManager.captureSession(this)
+        if (session != null) {
+            ProfileManager.applyProfile(this, session)
+        } else {
+            CookieManager.getInstance().removeAllCookies(null)
+            CookieManager.getInstance().flush()
+        }
+        Toast.makeText(this, getString(R.string.main_third_party_cleared), Toast.LENGTH_SHORT).show()
     }
 
     private fun handleSleepTimerExpire() {
@@ -1263,29 +1197,14 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun destroyWebView() {
-        Logger.i(TAG, "destroying webview")
+        Logger.i(TAG, "releasing webview")
         pipVideoView = null
         pipVideoCallback = null
         pipVideoActive.value = false
         pipLyricsRequested = false
         hidePipOverlay()
-        webView?.let {
-            it.stopLoading()
-            OriginScopedBridge.remove(it)
-            if (WebViewFeature.isFeatureSupported(WebViewFeature.GET_WEB_VIEW_RENDERER) &&
-                WebViewFeature.isFeatureSupported(WebViewFeature.WEB_VIEW_RENDERER_TERMINATE)) {
-                try {
-                    WebViewCompat.getWebViewRenderProcess(it)?.terminate()
-                } catch (_: Exception) {}
-            }
-            // Must detach from its parent before destroy()
-            // Otherwise the WebView and its renderer will be left in a bad state;
-            (it.parent as? ViewGroup)?.removeView(it)
-            it.removeAllViews()
-            it.destroy()
-        }
-        webView = null
-        MediaNotificationService.webView = null
+        WebViewHost.release()
+        webViewGeneration.intValue++
     }
 
     private fun applyOrientation() {
@@ -1336,13 +1255,11 @@ class MainActivity : ComponentActivity() {
     private fun startMediaService() {
         Logger.d(TAG, "startMediaService requested")
         if (MediaNotificationService.instance != null) {
-            Logger.d(TAG, "media service already running, rebinding webview")
-            MediaNotificationService.webView = webView
+            Logger.d(TAG, "media service already running")
             return
         }
         if (serviceStarted) return
         serviceStarted = true
-        MediaNotificationService.webView = webView
         val intent = Intent(this, MediaNotificationService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(intent)
@@ -1354,6 +1271,7 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         super.onStop()
         Logger.i(TAG, "activity stopped: suspending webview loops")
+        WebViewHost.detach(this)
         webView?.evaluateJavascript("""
             try {
                 window.__splBg = true;
@@ -1367,6 +1285,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         Logger.i(TAG, "activity resumed: restoring webview loops")
+        WebViewHost.attach(this)
 
         analytics.logEvent(FirebaseAnalytics.Event.SCREEN_VIEW, Bundle().apply {
             putString(FirebaseAnalytics.Param.SCREEN_NAME, "MainActivity")
@@ -1380,7 +1299,7 @@ class MainActivity : ComponentActivity() {
         hideTopBarState.value = prefs.getBoolean("HideTopBar", false)
         landscapeModeState.value = prefs.getBoolean("LandscapeMode", false)
         keepScreenOnState.value = prefs.getBoolean("KeepScreenOn", false)
-        paletteSeedState.value = prefs.getString("PaletteSeed", null)
+        themePresetState.value = prefs.getString("ThemePreset", ThemePresets.DEFAULT_ID) ?: ThemePresets.DEFAULT_ID
         blockServiceWorkerState.value = prefs.getBoolean("BlockServiceWorker", true)
         applyOrientation()
         applyKeepScreenOn()
@@ -1389,8 +1308,6 @@ class MainActivity : ComponentActivity() {
         val amoledEnabled = prefs.getBoolean("AmoledTheme", false)
 
         webView?.let { view ->
-            if (!WebSecurityPolicy.isPlayer(view.url)) return@let
-            val resumedUrl = view.url
             view.evaluateJavascript("""
                 try {
                     window.__splBg = false;
@@ -1407,14 +1324,13 @@ class MainActivity : ComponentActivity() {
 
             val js = buildString {
                 append(buildAmoledJs(amoledEnabled))
-                append(AccentTheme.buildAccentJs(this@MainActivity))
+                append(ThemeController.buildAccentJs(this@MainActivity))
                 append(buildCustomCssJs(customCss))
                 append(LyricsTheme.buildLyricsStyleJs(prefs.getString("LyricsStyle", LyricsTheme.DEFAULT_STYLE) ?: LyricsTheme.DEFAULT_STYLE))
             }
             view.evaluateJavascript(js, null)
 
             view.evaluateJavascript(LogoutCheck.CONTENT) { result ->
-                if (view.url != resumedUrl || !WebSecurityPolicy.isPlayer(view.url)) return@evaluateJavascript
                 if (result == "\"out\"") {
                     prefs.edit().putBoolean("LoggedIn", false).apply()
                     view.loadUrl("https://accounts.spotify.com/login")
@@ -1427,7 +1343,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         if (captureMediaSearch(intent)) {
             webView?.let { view ->
-                if (WebSecurityPolicy.isPlayer(view.url)) {
+                if (isPlayerUrl(view.url)) {
                     view.evaluateJavascript("typeof window.searchMediaItems==='function'") { ready ->
                         if (ready == "true") playPendingSearch(view)
                     }
@@ -1505,25 +1421,48 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        Logger.i(TAG, "activity destroyed, tearing down webview")
+        Logger.i(TAG, "activity destroyed, detaching from the webview")
         pipVideoView = null
         pipVideoCallback = null
         pipVideoActive.value = false
         pipLyricsRequested = false
         hidePipOverlay()
-        webView?.let {
-            it.stopLoading()
-            it.clearHistory()
-            it.clearFormData()
-            OriginScopedBridge.remove(it)
-            (it.parent as? ViewGroup)?.removeView(it)
-            it.removeAllViews()
-            it.destroy()
-        }
-        webView = null
-        MediaNotificationService.webView = null
+        WebViewHost.detach(this)
+        WebViewHost.bridge?.rebind(WeakReference(null))
+        if (MediaNotificationService.instance == null) WebViewHost.release()
         serviceStarted = false
         super.onDestroy()
+    }
+
+    override fun onProgress(progress: Int) {
+        loadingProgress.intValue = progress
+    }
+
+    override fun onShowCustomView(view: View?, callback: android.webkit.WebChromeClient.CustomViewCallback?) {
+        handleCustomViewShown(view, callback)
+    }
+
+    override fun onHideCustomView() {
+        handleCustomViewHidden()
+    }
+
+    override fun onWebViewError(code: Int, description: String) {
+        webViewError.value = code to description
+    }
+
+    override fun onRenderProcessGone() {
+        runOnUiThread {
+            webViewError.value = null
+            webViewGeneration.intValue++
+        }
+    }
+
+    override fun onPlayerReady(view: WebView) {
+        playPendingSearch(view)
+    }
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(AppLocale.wrap(newBase))
     }
 }
 

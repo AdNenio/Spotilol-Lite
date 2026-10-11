@@ -1,6 +1,5 @@
 package com.project.lol.service
 
-/** Escapes caller-supplied voice queries before passing them to the player. */
 object MediaSearch {
     fun playSearchScript(query: String?): String {
         if (query.isNullOrBlank()) return "actPlayPause(true);"

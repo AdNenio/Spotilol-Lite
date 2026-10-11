@@ -1,19 +1,26 @@
 package com.project.lol
 
 import android.app.Application
+import android.content.Context
+import com.project.lol.innertube.YouTube
+import com.project.lol.ui.theme.ThemeController
+import com.project.lol.util.AppLocale
 import com.project.lol.util.CrashHandler
 import com.project.lol.util.Logger
 import com.project.lol.util.PlaybackDiagnostics
 import com.project.lol.yt.cipher.CipherDeobfuscator
+import java.io.File
 
 class SpotilolApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
         Logger.init(this)
+        ThemeController.init(this)
         migrateProxyEraPrefs()
         CrashHandler.install(this)
         CipherDeobfuscator.initialize(this)
+        YouTube.setCacheDir(File(cacheDir, "innertube_http"))
         Thread { runCatching { PlaybackDiagnostics.log(this@SpotilolApp) } }.start()
         Logger.s("app", "started")
     }
@@ -28,5 +35,9 @@ class SpotilolApp : Application() {
         edit.putBoolean("ProxyEraMigrated", true)
         edit.apply()
         if (fromProxyEra) Logger.i("app", "proxy era prefs migrated")
+    }
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(AppLocale.wrap(newBase))
     }
 }

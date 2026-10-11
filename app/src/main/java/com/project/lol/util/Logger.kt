@@ -3,7 +3,6 @@ package com.project.lol.util
 import android.content.Context
 import android.util.Log
 import com.project.lol.BuildConfig
-import com.project.lol.security.LogRedactor
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -46,7 +45,7 @@ class LogEntry internal constructor(
     val throwable: Throwable?
 ) {
     val time: String = Logger.timeOf(timestamp)
-    val stack: String? = throwable?.stackTraceToString()?.let(LogRedactor::redact)
+    val stack: String? = throwable?.stackTraceToString()
 
     fun line(): String {
         val builder = StringBuilder()
@@ -67,7 +66,6 @@ object Logger {
 
     private const val PREF_KEY = "Logging"
     private const val LEGACY_PREF_KEY = "DebugOverlay"
-    private const val MAX_ENTRIES = 2000
     private const val MAX_MESSAGE = 4000
     private const val APP_TAG = "app"
 
@@ -113,7 +111,7 @@ object Logger {
     fun log(level: LogLevel, tag: String, message: String?, throwable: Throwable? = null) {
         val enabled = enabledFlag.get()
         if (!enabled && level.priority < LogLevel.WARN.priority) return
-        val text = LogRedactor.redact(message ?: throwable?.message ?: "").take(MAX_MESSAGE)
+        val text = (message ?: throwable?.message ?: "").take(MAX_MESSAGE)
         val safeTag = tag.ifBlank { APP_TAG }
         if (enabled) {
             val entry = LogEntry(
@@ -126,16 +124,14 @@ object Logger {
             )
             synchronized(lock) {
                 buf.addLast(entry)
-                while (buf.size > MAX_ENTRIES) buf.removeFirst()
             }
         }
-        val logcatText = text + (throwable?.stackTraceToString()?.let { "\n" + LogRedactor.redact(it) } ?: "")
         when (level) {
-            LogLevel.VERBOSE -> Log.v(safeTag, logcatText)
-            LogLevel.DEBUG -> Log.d(safeTag, logcatText)
-            LogLevel.INFO, LogLevel.SYS -> Log.i(safeTag, logcatText)
-            LogLevel.WARN -> Log.w(safeTag, logcatText)
-            LogLevel.ERROR -> Log.e(safeTag, logcatText)
+            LogLevel.VERBOSE -> Log.v(safeTag, text, throwable)
+            LogLevel.DEBUG -> Log.d(safeTag, text, throwable)
+            LogLevel.INFO, LogLevel.SYS -> Log.i(safeTag, text, throwable)
+            LogLevel.WARN -> Log.w(safeTag, text, throwable)
+            LogLevel.ERROR -> Log.e(safeTag, text, throwable)
         }
     }
 

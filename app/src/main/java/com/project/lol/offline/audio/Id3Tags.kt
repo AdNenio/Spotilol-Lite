@@ -26,7 +26,10 @@ internal object Id3Tags {
         title: String,
         artist: String,
         album: String,
-        cover: ByteArray?
+        cover: ByteArray?,
+        trackNumber: Int? = null,
+        discNumber: Int? = null,
+        year: Int? = null,
     ): Boolean {
         val audioStart = existingTagSize(file)
         val audioEnd = file.length() - id3v1Size(file)
@@ -35,7 +38,7 @@ internal object Id3Tags {
         val temp = File(file.parentFile, "${file.name}.tagged")
         try {
             BufferedOutputStream(FileOutputStream(temp)).use { out ->
-                out.write(buildTag(title, artist, album, cover))
+                out.write(buildTag(title, artist, album, cover, trackNumber, discNumber, year))
                 BufferedInputStream(FileInputStream(file)).use { input ->
                     var toSkip = audioStart.toLong()
                     while (toSkip > 0) {
@@ -70,12 +73,18 @@ internal object Id3Tags {
         title: String,
         artist: String,
         album: String,
-        cover: ByteArray?
+        cover: ByteArray?,
+        trackNumber: Int?,
+        discNumber: Int?,
+        year: Int?,
     ): ByteArray {
         val frames = ByteArrayOutputStream()
         writeTextFrame(frames, "TIT2", title)
         writeTextFrame(frames, "TPE1", artist)
         writeTextFrame(frames, "TALB", album)
+        if (trackNumber != null && trackNumber > 0) writeTextFrame(frames, "TRCK", trackNumber.toString())
+        if (discNumber != null && discNumber > 0) writeTextFrame(frames, "TPOS", discNumber.toString())
+        if (year != null && year > 0) writeTextFrame(frames, "TDRC", year.toString())
         if (cover != null && cover.isNotEmpty()) writePictureFrame(frames, cover)
 
         val body = frames.toByteArray()

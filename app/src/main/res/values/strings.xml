@@ -9,17 +9,9 @@
     <string name="settings_tab_content">Content</string>
     <string name="settings_tab_advanced">Advanced</string>
     <string name="settings_tab_about">About</string>
+    <string name="settings_language">Language</string>
+    <string name="settings_language_system">Default (device)</string>
 
-    <string name="settings_palette_default">Default</string>
-    <string name="settings_palette_spotify_green">Spotify Green</string>
-    <string name="settings_palette_purple">Purple</string>
-    <string name="settings_palette_blue">Blue</string>
-    <string name="settings_palette_red">Red</string>
-    <string name="settings_palette_orange">Orange</string>
-    <string name="settings_palette_pink">Pink</string>
-    <string name="settings_palette_teal">Teal</string>
-    <string name="settings_palette_yellow">Yellow</string>
-    <string name="settings_palette_cyan">Cyan</string>
 
     <string name="settings_section_appearance">APPEARANCE</string>
     <string name="settings_section_player">PLAYER</string>
@@ -42,16 +34,6 @@
     <string name="settings_custom_css_placeholder">/* Write your CSS overrides here (use !important if needed) */\naside[data-testid=now-playing-bar] { display: none !important; }</string>
     <string name="settings_material_you">Material You Theme</string>
     <string name="settings_material_you_subtitle">Use Android system dynamic colors</string>
-    <string name="settings_accent_color">Accent Color</string>
-    <string name="settings_accent_dynamic">Dynamic (system colors)</string>
-    <string name="settings_accent_default">Default</string>
-    <string name="settings_accent_custom">Custom %1$s</string>
-    <string name="settings_custom_accent_color">Custom accent color</string>
-    <string name="settings_default_scheme">Default scheme</string>
-    <string name="settings_color_red">Red</string>
-    <string name="settings_color_green">Green</string>
-    <string name="settings_color_blue">Blue</string>
-    <string name="settings_apply">Apply</string>
     <string name="settings_amoled_theme">AMOLED Theme</string>
     <string name="settings_amoled_theme_subtitle">Pure black background to save battery</string>
     <string name="settings_hide_top_bar">Hide Top Bar</string>
@@ -135,6 +117,9 @@
     <string name="settings_empty_cache_data_subtitle">Clear everything and log out</string>
     <string name="settings_empty_cache_data_message">All cookies and login data will be deleted. On restart you will need to log in again. Continue?</string>
     <string name="settings_clear_all_data">Clear All Data</string>
+    <string name="settings_clear_third_party">Clear Third-Party Logins</string>
+    <string name="settings_clear_third_party_subtitle">Sign out of Google, Facebook and Apple</string>
+    <string name="settings_clear_third_party_message">This signs you out of Google, Facebook and Apple in the web view. Your Spotify session is kept. Continue?</string>
     <string name="settings_open_links">Open Spotify Links</string>
     <string name="settings_open_links_subtitle">Enable link handling to open shared links here</string>
     <string name="settings_open_links_always_hint">Use \'Always\' when opening a Spotify link</string>
@@ -239,18 +224,18 @@
     <string name="offline_act_toast_profile_deleted">Profile deleted</string>
     <string name="offline_act_toast_cache_cleared">Cache cleared successfully</string>
     <string name="offline_act_toast_all_data_cleared">All data cleared</string>
+    <string name="offline_act_toast_third_party_cleared">Third-party logins cleared</string>
     <string name="main_update_available">A new update is available</string>
     <string name="main_version_label">v%1$s · %2$s</string>
     <string name="main_settings_content_description">Settings</string>
     <string name="main_webview_version">Webview: %1$s</string>
     <string name="main_webview_version_unknown">N/A</string>
     <string name="main_account_saved">Account saved</string>
-    <string name="main_profile_save_failed">Could not save encrypted profile</string>
     <string name="main_profile_load_failed">Profile could not be loaded</string>
     <string name="main_profile_deleted">Profile deleted</string>
-    <string name="main_profile_delete_failed">Could not update encrypted profiles</string>
     <string name="main_cache_cleared">Cache cleared successfully</string>
     <string name="main_all_data_cleared">All data cleared, please login again</string>
+    <string name="main_third_party_cleared">Third-party logins cleared</string>
     <string name="main_timer_remaining">%1$d:%2$02d min remaining</string>
     <string name="main_sleep_timer_title">Sleep Timer</string>
     <string name="main_sleep_timer_emoji">⏰</string>
@@ -348,12 +333,12 @@
     <string name="dl_notif_failed">%1$d failed</string>
     <string name="dl_notif_skipped">%1$d skipped</string>
     <string name="dl_notif_queued">%1$d queued</string>
-    <string name="dl_notif_preparing">Preparing download...</string>
+    <string name="dl_notif_preparing">Preparing download…</string>
     <string name="dl_notif_action_skip">Skip</string>
     <string name="dl_notif_action_cancel">Cancel</string>
 
     <string name="bridge_player_unlocked">Player unlocked</string>
-    <string name="bridge_reloading">Reloading...</string>
+    <string name="bridge_reloading">Reloading…</string>
 
     <string name="service_disabled_message">Service is not enabled</string>
 
@@ -361,7 +346,6 @@
     <string name="widget_player_description">Playback controls for Spotilol</string>
     <string name="widget_art_name">Spotilol art</string>
     <string name="widget_art_description">Album art of the current track</string>
-    <string name="widget_action_open_app">Open Spotilol</string>
     <string name="widget_action_shuffle">Shuffle</string>
     <string name="widget_action_repeat">Repeat</string>
     <string name="widget_empty_title">Spotilol</string>
@@ -369,4 +353,57 @@
     <string name="settings_section_privacy">Privacy</string>
     <string name="settings_telemetry">Usage and performance data</string>
     <string name="settings_telemetry_subtitle">Share anonymous usage and performance data. Off by default; crash reports are always sent.</string>
+
+    <string name="dl_status_invalid_request">Invalid download request</string>
+    <string name="dl_status_no_current_track">Could not identify the current track</string>
+    <string name="dl_status_already_downloading">This track is already downloading</string>
+    <string name="dl_status_no_tracks">No tracks found</string>
+    <string name="dl_status_no_downloadable_tracks">No downloadable tracks found</string>
+    <string name="dl_status_already_saved_to">Already saved to %1$s</string>
+    <string name="dl_status_saved_to">Saved to %1$s</string>
+    <string name="dl_status_failed">Download failed: %1$s</string>
+    <string name="dl_status_cancelled">Download cancelled</string>
+    <string name="dl_stage_queued">Queued</string>
+    <string name="dl_progress_queued">Queued %1$d tracks — %2$s</string>
+    <string name="dl_progress_resolving_audio">Resolving audio…</string>
+    <string name="dl_stage_resolving_audio">Resolving audio</string>
+    <string name="dl_progress_resolving">Resolving…</string>
+    <string name="dl_progress_downloading_audio">Downloading audio…</string>
+    <string name="dl_progress_saving">Saving…</string>
+    <string name="dl_progress_converting">Converting to %1$s</string>
+    <string name="dl_progress_preparing_m4a">Preparing M4A</string>
+    <string name="dl_progress_writing_tags">Writing tags…</string>
+    <string name="dl_stage_reading_playlist">Reading playlist</string>
+    <string name="dl_progress_already_saved">Already saved</string>
+    <string name="dl_progress_saved">Saved</string>
+    <string name="dl_progress_skipped">Skipped</string>
+    <string name="dl_progress_cancelled">Cancelled</string>
+    <string name="dl_progress_failed_skipping">Failed — skipping</string>
+    <string name="dl_progress_track_of">%1$d/%2$d · %3$s — %4$s</string>
+    <string name="dl_summary_saved_one">1 track saved</string>
+    <string name="dl_summary_saved_many">%1$d tracks saved</string>
+    <string name="dl_summary_skipped">%1$d skipped</string>
+    <string name="dl_summary_failed">%1$d failed</string>
+    <string name="dl_summary_cancelled">cancelled at %1$d/%2$d</string>
+    <string name="dl_progress_summary">%1$s — %2$s</string>
+    <string name="dl_collection_default">Collection</string>
+    <string name="dl_error_unknown">unknown error</string>
+    <string name="dl_error_conversion_failed">Audio conversion failed</string>
+    <string name="dl_error_could_not_save">Couldn\'t save file</string>
+    <string name="dl_error_search_failed">Search failed on YouTube Music</string>
+    <string name="dl_error_no_results">No results on YouTube Music</string>
+    <string name="dl_error_no_song_results">No song results on YouTube Music</string>
+    <string name="dl_error_no_match">No matching track on YouTube Music</string>
+    <string name="dl_error_stream_unavailable">Stream unavailable: %1$s</string>
+    <string name="dl_error_stream_unavailable_detail">Stream unavailable: %1$s (%2$s)</string>
+    <string name="dl_error_empty_stream_url">Empty stream url from YouTube</string>
+    <string name="dl_error_http">Stream returned HTTP %1$d</string>
+    <string name="dl_error_connection_reset">Connection reset</string>
+    <string name="dl_error_download">Download error</string>
+
+    <string name="settings_fast_startup">Fast Startup</string>
+    <string name="settings_fast_startup_subtitle">Start instantly instead of waiting for the splash animation</string>
+
+    <string name="settings_theme">Theme</string>
+    <string name="settings_theme_dynamic">Dynamic (system colors)</string>
 </resources>

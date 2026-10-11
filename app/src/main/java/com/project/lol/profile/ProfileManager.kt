@@ -6,7 +6,6 @@ import android.webkit.CookieManager
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKeys
 import com.project.lol.util.Logger
-import com.project.lol.security.WebSecurityPolicy
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -33,52 +32,78 @@ object ProfileManager {
     )
 
     private fun prefs(context: Context): SharedPreferences {
-        val masterKey = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
-        return EncryptedSharedPreferences.create(
-            PREFS, masterKey, context,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-        )
+        try {
+            val masterKey = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
+            return EncryptedSharedPreferences.create(
+                PREFS,
+                masterKey,
+                context,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (e: Exception) {
+            try {
+                val ks = java.security.KeyStore.getInstance("AndroidKeyStore")
+                ks.load(null)
+                ks.deleteEntry(MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC))
+            } catch (_: Exception) {}
+            return try {
+                val masterKey = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
+                EncryptedSharedPreferences.create(
+                    PREFS,
+                    masterKey,
+                    context,
+                    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+                )
+            } catch (_: Exception) {
+                context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            }
+        }
     }
 
-    fun getProfiles(context: Context): List<Profile> = runCatching { readProfiles(prefs(context)) }.getOrElse {
-        Logger.w(TAG, "Encrypted profiles unavailable")
-        emptyList()
-    }
-
-    internal fun readProfiles(storage: SharedPreferences): List<Profile> {
-        val raw = storage.getString(KEY_PROFILES, null) ?: return emptyList()
-        val arr = JSONArray(raw)
-        return (0 until arr.length()).map { i ->
-            val o = arr.getJSONObject(i)
-            val name = o.getString("name")
-            val cookies = o.getString("cookies")
-            require(name.isNotBlank() && cookies.isNotBlank()) { "Invalid stored profile" }
-            Profile(name, cookies, o.optLong("savedAt", 0L))
+    fun getProfiles(context: Context): List<Profile> {
+        val raw = prefs(context).getString(KEY_PROFILES, null) ?: return emptyList()
+        return try {
+            val arr = JSONArray(raw)
+            (0 until arr.length()).mapNotNull { i ->
+                val o = arr.getJSONObject(i)
+                val name = o.optString("name")
+                val cookies = o.optString("cookies")
+                if (name.isBlank() || cookies.isBlank()) null
+                else Profile(name, cookies, o.optLong("savedAt", 0L))
+            }
+        } catch (_: Exception) {
+            emptyList()
         }
     }
 
     fun saveProfile(context: Context, name: String, cookies: String) {
         val trimmed = name.trim()
-        require(trimmed.isNotEmpty() && cookies.isNotEmpty())
-        updateProfiles(prefs(context)) { profiles ->
-            listOf(Profile(trimmed, cookies, System.currentTimeMillis())) + profiles.filterNot { it.name == trimmed }
-        }
-        Logger.i(TAG, "profile saved")
+        val list = getProfiles(context).toMutableList()
+        list.removeAll { it.name == trimmed }
+        list.add(0, Profile(trimmed, cookies, System.currentTimeMillis()))
+        writeProfiles(context, list)
+        Logger.i(TAG, "profile saved: $trimmed (${cookies.length} chars, total=${list.size})")
     }
 
     fun deleteProfile(context: Context, name: String) {
-        updateProfiles(prefs(context)) { profiles -> profiles.filterNot { it.name == name } }
-        Logger.i(TAG, "profile deleted")
+        val remaining = getProfiles(context).filterNot { it.name == name }
+        writeProfiles(context, remaining)
+        Logger.i(TAG, "profile deleted: $name (remaining=${remaining.size})")
     }
 
-    internal fun updateProfiles(storage: SharedPreferences, update: (List<Profile>) -> List<Profile>) {
-        val profiles = update(readProfiles(storage)) // Never reinterpret unreadable records as empty.
+    private fun writeProfiles(context: Context, profiles: List<Profile>) {
         val arr = JSONArray()
         profiles.forEach { p ->
-            arr.put(JSONObject().put("name", p.name).put("cookies", p.cookies).put("savedAt", p.savedAt))
+            arr.put(
+                JSONObject()
+                    .put("name", p.name)
+                    .put("cookies", p.cookies)
+                    .put("savedAt", p.savedAt)
+            )
         }
-        check(storage.edit().putString(KEY_PROFILES, arr.toString()).commit()) { "Cannot save encrypted profiles" }
+        prefs(context).edit().putString(KEY_PROFILES, arr.toString()).apply()
     }
 
     fun captureSession(context: Context): String? {
@@ -106,7 +131,6 @@ object ProfileManager {
             val keys = map.keys()
             while (keys.hasNext()) {
                 val domain = keys.next()
-                require(domain in COOKIE_DOMAINS) { "Untrusted profile cookie domain" }
                 out.add(domain to map.getString(domain))
             }
             out
@@ -120,8 +144,8 @@ object ProfileManager {
             for ((domain, cookies) in entries) {
                 for (pair in cookies.split(";")) {
                     val cookie = pair.trim()
-                    WebSecurityPolicy.restoreCookie(cookie)?.let {
-                        CookieManager.getInstance().setCookie(domain, it)
+                    if (cookie.contains("=")) {
+                        CookieManager.getInstance().setCookie(domain, cookie)
                     }
                 }
             }

@@ -3,20 +3,27 @@ package com.project.lol.webview.injections
 object DownloadButton {
     const val CONTENT = """
             window.splDoDownload = function(){
-                var id = window.splTrackId || window.__curTrackId;
+                var id = (typeof window.splPlayingTrackId === 'function' && window.splPlayingTrackId()) || window.splTrackId || window.__curTrackId;
                 if(!id){
                     AndBridge.deferMessage('Track not ready');
                     return;
                 }
-                var m = (window.__splTrackMeta && window.__splTrackMeta[id]) || {};
-                var payload = JSON.stringify({
-                    trackId: id,
-                    title: m.name || window.track || window.__curTrackName || '',
-                    artist: m.artist || window.artist || window.__curTrackArtist || '',
-                    album: m.album || window.__curTrackAlbum || '',
-                    cover: m.cover || window.__curTrackCover || window.cover || ''
-                });
-                AndBridge.downloadTrack(payload);
+                var send = function(){
+                    var m = (window.__splTrackMeta && window.__splTrackMeta[id]) || {};
+                    AndBridge.downloadTrack(JSON.stringify({
+                        trackId: id,
+                        title: m.name || window.track || window.__curTrackName || '',
+                        artist: m.artist || window.artist || window.__curTrackArtist || '',
+                        album: m.album || ((window.__curTrackId === id) ? window.__curTrackAlbum : '') || '',
+                        cover: m.cover || window.cover || ((window.__curTrackId === id) ? window.__curTrackCover : '') || '',
+                        trackNumber: m.trackNumber || 0,
+                        discNumber: m.discNumber || 0,
+                        year: m.year || 0
+                    }));
+                };
+                if(typeof window.splEnsureTrackMeta === 'function'){
+                    window.splEnsureTrackMeta(id).then(send, send);
+                } else { send(); }
             };
             window.splAddDownloadBtn = function(){
                 if(typeof window.dlBtn !== 'undefined') return;

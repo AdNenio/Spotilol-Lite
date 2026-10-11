@@ -9,17 +9,27 @@ import java.nio.ByteOrder
 
 object Mp4Tags {
     private const val TAG = "Spl-DL"
+    private const val DATA_TYPE_BINARY = 0
     private const val DATA_TYPE_TEXT = 1
     private const val DATA_TYPE_JPEG = 13
     private const val DATA_TYPE_PNG = 14
 
-    private val OWNED_ITEM_IDS = setOf("©nam", "©ART", "©alb", "covr")
+    private val OWNED_ITEM_IDS = setOf("©nam", "©ART", "©alb", "covr", "©day", "trkn", "disk")
 
     private data class Box(val id: String, val offset: Long, val headerSize: Int, val size: Long)
 
     fun isTaggable(file: File): Boolean = findMoovAtEnd(file) != null
 
-    fun writeTags(file: File, title: String, artist: String, album: String, cover: ByteArray?): Boolean {
+    fun writeTags(
+        file: File,
+        title: String,
+        artist: String,
+        album: String,
+        cover: ByteArray?,
+        trackNumber: Int? = null,
+        discNumber: Int? = null,
+        year: Int? = null,
+    ): Boolean {
         val moov = findMoovAtEnd(file) ?: run {
             Logger.w(TAG, "mp4TagWriter: no trailing moov atom in ${file.name}")
             return false
@@ -30,7 +40,7 @@ object Mp4Tags {
         }
         val existingUdta = moovChildren.lastOrNull { it.id == "udta" }
         val existingItems = existingUdta?.let { readIlstItems(file, it) } ?: emptyList()
-        val udta = buildUdta(existingItems, title, artist, album, cover)
+        val udta = buildUdta(existingItems, title, artist, album, cover, trackNumber, discNumber, year)
         if (udta.isEmpty()) {
             Logger.w(TAG, "mp4TagWriter: nothing to write for ${file.name}")
             return false
@@ -192,15 +202,21 @@ object Mp4Tags {
         title: String,
         artist: String,
         album: String,
-        cover: ByteArray?
+        cover: ByteArray?,
+        trackNumber: Int?,
+        discNumber: Int?,
+        year: Int?,
     ): ByteArray {
-        val items = ArrayList<ByteArray>(existingItems.size + 4)
+        val items = ArrayList<ByteArray>(existingItems.size + 6)
         for ((id, bytes) in existingItems) {
             if (id !in OWNED_ITEM_IDS) items += bytes
         }
         if (title.isNotBlank()) items += item("©nam", DATA_TYPE_TEXT, title.toByteArray(Charsets.UTF_8))
         if (artist.isNotBlank()) items += item("©ART", DATA_TYPE_TEXT, artist.toByteArray(Charsets.UTF_8))
         if (album.isNotBlank()) items += item("©alb", DATA_TYPE_TEXT, album.toByteArray(Charsets.UTF_8))
+        if (trackNumber != null && trackNumber > 0) items += item("trkn", DATA_TYPE_BINARY, numberPayload(trackNumber))
+        if (discNumber != null && discNumber > 0) items += item("disk", DATA_TYPE_BINARY, numberPayload(discNumber))
+        if (year != null && year > 0) items += item("©day", DATA_TYPE_TEXT, year.toString().toByteArray(Charsets.UTF_8))
         if (cover != null && cover.isNotEmpty()) {
             items += item("covr", if (isPng(cover)) DATA_TYPE_PNG else DATA_TYPE_JPEG, cover)
         }
@@ -221,6 +237,11 @@ object Mp4Tags {
         data.putInt(0)
         data.put(payload)
         return box(name, data.array())
+    }
+
+    private fun numberPayload(number: Int): ByteArray {
+        val value = number.coerceIn(0, 0xFFFF)
+        return byteArrayOf(0, 0, (value shr 8).toByte(), value.toByte(), 0, 0, 0, 0)
     }
 
     private fun box(id: String, payload: ByteArray): ByteArray {

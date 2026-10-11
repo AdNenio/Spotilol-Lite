@@ -93,7 +93,122 @@ object CollectionDownload {
                 return n || fallback;
             }
         
-            function loadAll(albumFallback, cb){
+            function yearInMetaRow(root){
+                var divs = root.querySelectorAll('div');
+                for (var i = 0; i < divs.length; i++) {
+                    var kids = divs[i].children;
+                    var hasBullet = false, year = 0;
+                    for (var j = 0; j < kids.length; j++) {
+                        if (kids[j].children.length !== 0) continue;
+                        var t = (kids[j].textContent || '').trim();
+                        if (t === '\u2022') hasBullet = true;
+                        else if (/^(19|20)[0-9]{2}$/.test(t)) year = parseInt(t, 10);
+                    }
+                    if (hasBullet && year) return year;
+                }
+                return 0;
+            }
+        
+            function albumYear(){
+                try {
+                    var h1 = document.querySelector('main h1');
+                    if (!h1) return 0;
+                    var node = h1;
+                    for (var up = 0; up < 4 && node; up++) {
+                        node = node.parentElement;
+                        if (!node) break;
+                        var y = yearInMetaRow(node);
+                        if (y) return y;
+                    }
+                } catch(e){}
+                return 0;
+            }
+        
+            function rowTrackNum(row){
+                var cell = row.querySelector('[role="gridcell"][aria-colindex="1"]');
+                if (!cell) return 0;
+                var sp = cell.querySelector('span');
+                var t = sp ? (sp.textContent || '').trim() : (cell.textContent || '').trim();
+                return /^[0-9]+$/.test(t) ? parseInt(t, 10) : 0;
+            }
+        
+            var META_CACHE = {};
+        
+            function b62ToHex(id){
+                var A = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+                var n = 0n;
+                for (var i = 0; i < id.length; i++) {
+                    var v = A.indexOf(id.charAt(i));
+                    if (v < 0) return null;
+                    n = n * 62n + BigInt(v);
+                }
+                var h = n.toString(16);
+                while (h.length < 32) h = '0' + h;
+                return h;
+            }
+        
+            function fetchTrackMeta(id){
+                if (META_CACHE[id]) return Promise.resolve(META_CACHE[id]);
+                var auth = window.spotAuthToken;
+                var hex = b62ToHex(id);
+                if (!auth || !hex) return Promise.resolve(null);
+                var f = window.oriFetch || window.fetch;
+                var url = 'https://spclient.wg.spotify.com/metadata/4/track/' + hex + '?market=from_token';
+                var headers = { 'Authorization': auth, 'app-platform': 'WebPlayer', 'accept': 'application/json' };
+                if (window.spotCliToken) headers['client-token'] = window.spotCliToken;
+                return f(url, { headers: headers })
+                    .then(function(r){
+                        var ct = r.headers.get('content-type') || '';
+                        if (!r.ok || ct.indexOf('json') === -1) return null;
+                        return r.json();
+                    })
+                    .then(function(j){
+                        if (!j) return null;
+                        var ad = (j.album && j.album.date) ? j.album.date : null;
+                        var m = {
+                            trackNumber: (typeof j.number === 'number' && j.number > 0) ? j.number : 0,
+                            discNumber: (typeof j.disc_number === 'number' && j.disc_number > 0) ? j.disc_number : 0,
+                            year: (ad && ad.year) ? ad.year : 0
+                        };
+                        META_CACHE[id] = m;
+                        return m;
+                    })
+                    .catch(function(){ return null; });
+            }
+        
+            function enrichTracks(tracks, cb){
+                var total = tracks.length;
+                if (!total) { cb(); return; }
+                var idx = 0, done = 0, active = 0, failed = 0, stopped = false;
+                var CONC = 4;
+                var finish = function(){ if (!stopped) { stopped = true; cb(); } };
+                var pump = function(){
+                    while (!stopped && active < CONC && idx < total) {
+                        let track = tracks[idx++];
+                        active++;
+                        fetchTrackMeta(track.trackId).then(function(m){
+                            if (m) {
+                                failed = 0;
+                                if (m.trackNumber) track.trackNumber = m.trackNumber;
+                                if (m.discNumber) track.discNumber = m.discNumber;
+                                if (m.year) track.year = m.year;
+                            } else {
+                                failed++;
+                            }
+                        }).catch(function(){ failed++; }).then(function(){
+                            active--; done++;
+                            if (done % 10 === 0 || done === total) {
+                                try { window.splDownloadProgress(0, 'Reading metadata... ' + done + '/' + total); } catch(e){}
+                            }
+                            if (done >= total || failed >= 5) { finish(); return; }
+                            pump();
+                        });
+                    }
+                };
+                pump();
+            }
+        
+            function loadAll(albumFallback, pageYear, cb){
                 var tl = mainGrid();
                 if (!tl) { cb([]); return; }
                 var sc = findScroller(tl);
@@ -111,7 +226,7 @@ object CollectionDownload {
                 };
                 var iv = setInterval(function(){
                     iter++;
-                    scrapeInto(albumFallback, tl, seen, out);
+                    scrapeInto(albumFallback, pageYear, tl, seen, out);
                     var pending = sc ? (sc.scrollTop < sc.scrollHeight - sc.clientHeight - 2) : false;
                     if (out.length === last) stall++; else stall = 0;
                     last = out.length;
@@ -128,7 +243,7 @@ object CollectionDownload {
                 }, 200);
             }
         
-            function scrapeInto(albumFallback, root, seen, out){
+            function scrapeInto(albumFallback, pageYear, root, seen, out){
                 var rows = root.querySelectorAll(ROW_SEL);
                 var checkReco = !!root.querySelector(RECO_SEL);
                 for (var i = 0; i < rows.length; i++) {
@@ -152,7 +267,17 @@ object CollectionDownload {
                     var album = albumFallback || (al ? (al.textContent || '').trim() : '');
                     var img = row.querySelector('img');
                     var cover = (img && img.src) ? upCover(img.src) : '';
-                    out.push({ trackId: id, title: title, artist: arts.join(', '), album: album, cover: cover });
+                    var mm = (window.__splTrackMeta && window.__splTrackMeta[id]) || {};
+                    out.push({
+                        trackId: id,
+                        title: title,
+                        artist: arts.join(', '),
+                        album: album,
+                        cover: cover,
+                        trackNumber: mm.trackNumber || rowTrackNum(row) || 0,
+                        discNumber: mm.discNumber || 0,
+                        year: mm.year || pageYear || 0
+                    });
                 }
             }
         
@@ -176,19 +301,24 @@ object CollectionDownload {
                         window.splDownloadProgress(0, 'Loading tracklist...');
                     }
                 } catch(e2){}
-                loadAll(albumFallback, function(tracks){
-                    window.__splColBusy = false;
-                    if (btn) btn.classList.remove('spl-ab-busy');
+                loadAll(albumFallback, albumYear(), function(tracks){
                     if (!tracks.length) {
+                        window.__splColBusy = false;
+                        if (btn) btn.classList.remove('spl-ab-busy');
                         try { AndBridge.deferMessage('No downloadable tracks found'); } catch(e3){}
                         return;
                     }
-                    var payload = { type: type, name: name, cover: findCover(), tracks: tracks };
-                    try {
-                        AndBridge.downloadCollection(JSON.stringify(payload));
-                    } catch(e4) {
-                        AndBridge.deferMessage('Download failed');
-                    }
+                    var send = function(){
+                        window.__splColBusy = false;
+                        if (btn) btn.classList.remove('spl-ab-busy');
+                        var payload = { type: type, name: name, cover: findCover(), tracks: tracks };
+                        try {
+                            AndBridge.downloadCollection(JSON.stringify(payload));
+                        } catch(e4) {
+                            AndBridge.deferMessage('Download failed');
+                        }
+                    };
+                    enrichTracks(tracks, send);
                 });
             }
         

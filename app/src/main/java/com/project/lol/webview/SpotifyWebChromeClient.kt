@@ -7,14 +7,12 @@ import android.os.Handler
 import android.os.Looper
 import android.view.View
 import android.webkit.ConsoleMessage
+import android.webkit.CookieManager
 import android.webkit.PermissionRequest
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.webkit.WebResourceRequest
-import android.webkit.WebSettings
-import com.project.lol.security.WebSecurityPolicy
 import com.project.lol.util.LogLevel
 import com.project.lol.util.Logger
 import com.project.lol.webview.injections.BrowserSpoof
@@ -61,9 +59,26 @@ class SpotifyWebChromeClient(
         return true
     }
 
-    private fun isSpotifyUrl(url: String): Boolean = WebSecurityPolicy.isPlayer(url) || WebSecurityPolicy.isAccounts(url)
-    private fun isOAuthUrl(url: String): Boolean = WebSecurityPolicy.isNavigation(url)
-    private fun isGoogleUrl(url: String): Boolean = WebSecurityPolicy.isGoogleAuth(url)
+    private fun isSpotifyUrl(url: String): Boolean {
+        return url.startsWith("https://open.spotify.com/") ||
+                url.startsWith("https://accounts.spotify.com/")
+    }
+
+    private fun isOAuthUrl(url: String): Boolean {
+        val host = runCatching { url.toUri().host?.lowercase() }.getOrNull() ?: return false
+        return host == "google.com" ||
+                host.endsWith(".google.com") ||
+                host.indexOf(".google.") != -1 ||
+                host == "facebook.com" ||
+                host.endsWith(".facebook.com") ||
+                host == "appleid.apple.com" ||
+                host.endsWith(".apple.com")
+    }
+
+    private fun isGoogleUrl(url: String): Boolean {
+        val host = runCatching { url.toUri().host?.lowercase() }.getOrNull() ?: return false
+        return host == "google.com" || host.endsWith(".google.com") || host.indexOf(".google.") != -1
+    }
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreateWindow(
@@ -76,22 +91,14 @@ class SpotifyWebChromeClient(
             try { it.destroy() } catch (_: Exception) {}
         }
         val context = view?.context ?: return false
-        val transport = resultMsg?.obj as? WebView.WebViewTransport ?: return false
         val newWebView = WebView(context).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
-            settings.allowFileAccess = false
-            settings.allowContentAccess = false
-            settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-            settings.setGeolocationEnabled(false)
             settings.userAgentString = DESKTOP_UA
+            CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
             webViewClient = object : WebViewClient() {
                 override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                     super.onPageStarted(view, url, favicon)
-                    if (url != null && !WebSecurityPolicy.isNavigation(url)) {
-                        view?.stopLoading()
-                        return
-                    }
                     if (url != null) {
                         if (isGoogleUrl(url)) {
                             view?.evaluateJavascript(GoogleSpoof.CONTENT, null)
@@ -109,10 +116,6 @@ class SpotifyWebChromeClient(
                     }
                 }
 
-                override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                    return request.isForMainFrame && !WebSecurityPolicy.isNavigation(request.url.toString())
-                }
-
                 @Deprecated("Deprecated in Java")
                 @Suppress("DEPRECATION")
                 override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
@@ -123,13 +126,15 @@ class SpotifyWebChromeClient(
                         try { view?.destroy() } catch (_: Exception) {}
                         return true
                     }
-                    return false
+                    view?.loadUrl(targetUrl)
+                    return true
                 }
             }
         }
         childWebView = newWebView
-        transport.webView = newWebView
-        resultMsg.sendToTarget()
+        val transport = resultMsg?.obj as? WebView.WebViewTransport
+        transport?.webView = newWebView
+        resultMsg?.sendToTarget()
         Logger.i(TAG, "child window created: $context")
         return true
     }
@@ -151,10 +156,9 @@ class SpotifyWebChromeClient(
         Handler(Looper.getMainLooper()).post {
             val resources = permissionRequest.resources
             val origin = permissionRequest.origin.toString()
-            Logger.i(TAG, "permission request: $origin ${resources.joinToString(",")}")
-            if (WebSecurityPolicy.isSpotifyHost(origin) &&
-                resources.contains(PermissionRequest.RESOURCE_PROTECTED_MEDIA_ID)) {
-                permissionRequest.grant(arrayOf(PermissionRequest.RESOURCE_PROTECTED_MEDIA_ID))
+            Logger.d(TAG, "permission request: $origin ${resources.joinToString(",")}")
+            if (resources.contains(PermissionRequest.RESOURCE_PROTECTED_MEDIA_ID)) {
+                permissionRequest.grant(resources)
                 Logger.i(TAG, "protected media granted")
             } else {
                 permissionRequest.deny()

@@ -63,12 +63,19 @@ object ContextMenuDownload {
                 }
                 var al = row.querySelector('a[href*="/album/"]');
                 var img = row.querySelector('img');
+                var cell = row.querySelector('[role="gridcell"][aria-colindex="1"]');
+                var numText = cell ? (cell.textContent||'').trim() : '';
+                var rowNum = /^[0-9]+$/.test(numText) ? parseInt(numText,10) : 0;
+                var mm = (window.__splTrackMeta && window.__splTrackMeta[m[1]]) || {};
                 return {
                     trackId: m[1],
                     title: (link.textContent||'').trim(),
                     artist: artists.join(', '),
                     album: al ? (al.textContent||'').trim() : '',
-                    cover: img ? splUpCover(img.src||'') : ''
+                    cover: img ? splUpCover(img.src||'') : '',
+                    trackNumber: mm.trackNumber || rowNum || 0,
+                    discNumber: mm.discNumber || 0,
+                    year: mm.year || 0
                 };
             }
         
@@ -103,7 +110,10 @@ object ContextMenuDownload {
                         title: track.title || '',
                         artist: track.artist || '',
                         album: track.album || '',
-                        cover: track.cover || ''
+                        cover: track.cover || '',
+                        trackNumber: track.trackNumber || 0,
+                        discNumber: track.discNumber || 0,
+                        year: track.year || 0
                     }));
                 }catch(e){}
             }

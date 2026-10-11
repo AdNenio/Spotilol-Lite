@@ -65,6 +65,8 @@ object YouTube {
             innerTube.useLoginForBrowse = value
         }
 
+    fun setCacheDir(dir: java.io.File?) = innerTube.setCacheDir(dir)
+
     suspend fun search(query: String, filter: SearchFilter): Result<SearchResult> = runCatching {
         val response = innerTube.search(WEB_REMIX, query, filter.value).body<SearchResponse>()
         val shelves = response.contents?.tabbedSearchResultsRenderer?.tabs?.firstOrNull()

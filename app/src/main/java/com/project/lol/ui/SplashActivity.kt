@@ -1,6 +1,7 @@
 package com.project.lol.ui
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
@@ -30,13 +31,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animate
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -71,10 +70,13 @@ import compose.icons.TablerIcons
 import compose.icons.tablericons.Bell
 import compose.icons.tablericons.Bluetooth
 import androidx.lifecycle.lifecycleScope
+import com.project.lol.util.AppLocale
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private val MonochromeAccent = Color(0xFFE0E0E0)
+private const val SPLASH_MIN_MS = 4000L
 
 class SplashActivity : ComponentActivity() {
 
@@ -115,6 +117,7 @@ class SplashActivity : ComponentActivity() {
             var checking by remember { mutableStateOf(false) }
             var preparing by remember { mutableStateOf(false) }
             var contentAlpha by remember { mutableFloatStateOf(1f) }
+            val fastStartup = remember { prefs.getBoolean("FastStartup", false) }
             val onboardingAppear = remember { Animatable(0f) }
             var onboardingLeaving by remember { mutableStateOf(false) }
             val scope = rememberCoroutineScope()
@@ -166,6 +169,7 @@ class SplashActivity : ComponentActivity() {
 
             LaunchedEffect(checkDone) {
                 if (!checkDone) return@LaunchedEffect
+                if (!fastStartup) delay(SPLASH_MIN_MS)
                 scope.launch {
                     animate(
                         initialValue = 1f,
@@ -227,45 +231,47 @@ class SplashActivity : ComponentActivity() {
         }
         return permissions
     }
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(AppLocale.wrap(newBase))
+    }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun LoadingScreen() {
-    val infiniteTransition = rememberInfiniteTransition(label = "title")
-    val titleAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.2f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "titleAlpha"
-    )
-
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        Text(
-            text = stringResource(R.string.splash_title),
+        LoadingIndicator(
             modifier = Modifier
                 .align(Alignment.Center)
-                .graphicsLayer { alpha = titleAlpha },
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.SemiBold,
+                .size(96.dp),
             color = Color.White
         )
 
-        Text(
-            text = stringResource(R.string.splash_version_label, BuildConfig.VERSION_NAME, BuildInfo.id),
+        Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .systemBarsPadding()
                 .padding(bottom = 28.dp),
-            style = MaterialTheme.typography.bodyMedium,
-            color = Color.White.copy(alpha = 0.35f)
-        )
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = stringResource(R.string.splash_title),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = stringResource(R.string.splash_version_label, BuildConfig.VERSION_NAME, BuildInfo.id),
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.35f)
+            )
+        }
     }
 }
 

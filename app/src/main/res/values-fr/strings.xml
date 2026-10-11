@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Spotilol</string>
     <string name="aa_playlists">Playlists</string>
@@ -9,17 +10,9 @@
     <string name="settings_tab_content">Contenu</string>
     <string name="settings_tab_advanced">Avancé</string>
     <string name="settings_tab_about">À propos</string>
+    <string name="settings_language">Langue</string>
+    <string name="settings_language_system">Par défaut (appareil)</string>
 
-    <string name="settings_palette_default">Par défaut</string>
-    <string name="settings_palette_spotify_green">Vert Spotify</string>
-    <string name="settings_palette_purple">Violet</string>
-    <string name="settings_palette_blue">Bleu</string>
-    <string name="settings_palette_red">Rouge</string>
-    <string name="settings_palette_orange">Orange</string>
-    <string name="settings_palette_pink">Rose</string>
-    <string name="settings_palette_teal">Sarcelle</string>
-    <string name="settings_palette_yellow">Jaune</string>
-    <string name="settings_palette_cyan">Cyan</string>
 
     <string name="settings_section_appearance">APPARENCE</string>
     <string name="settings_section_player">LECTEUR</string>
@@ -42,16 +35,6 @@
     <string name="settings_custom_css_placeholder">/* Écrivez vos règles CSS ici (utilisez !important si nécessaire) */\naside[data-testid=now-playing-bar] { display: none !important; }</string>
     <string name="settings_material_you">Thème Material You</string>
     <string name="settings_material_you_subtitle">Utiliser les couleurs dynamiques du système Android</string>
-    <string name="settings_accent_color">Couleur d\'accentuation</string>
-    <string name="settings_accent_dynamic">Dynamique (couleurs système)</string>
-    <string name="settings_accent_default">Par défaut</string>
-    <string name="settings_accent_custom">Personnalisée %1$s</string>
-    <string name="settings_custom_accent_color">Couleur d\'accentuation personnalisée</string>
-    <string name="settings_default_scheme">Thème par défaut</string>
-    <string name="settings_color_red">Rouge</string>
-    <string name="settings_color_green">Vert</string>
-    <string name="settings_color_blue">Bleu</string>
-    <string name="settings_apply">Appliquer</string>
     <string name="settings_amoled_theme">Thème AMOLED</string>
     <string name="settings_amoled_theme_subtitle">Arrière-plan noir pur pour économiser la batterie</string>
     <string name="settings_hide_top_bar">Masquer la barre supérieure</string>
@@ -135,6 +118,9 @@
     <string name="settings_empty_cache_data_subtitle">Tout effacer et se déconnecter</string>
     <string name="settings_empty_cache_data_message">Tous les cookies et données de connexion seront supprimés. Au redémarrage, vous devrez vous reconnecter. Continuer ?</string>
     <string name="settings_clear_all_data">Effacer toutes les données</string>
+    <string name="settings_clear_third_party">Effacer les connexions tierces</string>
+    <string name="settings_clear_third_party_subtitle">Déconnectez-vous de Google, Facebook et Apple</string>
+    <string name="settings_clear_third_party_message">Cela vous déconnecte de Google, Facebook et Apple dans la vue web. Votre session Spotify est conservée. Continuer ?</string>
     <string name="settings_open_links">Ouvrir les liens Spotify</string>
     <string name="settings_open_links_subtitle">Activer la prise en charge des liens pour ouvrir les liens partagés ici</string>
     <string name="settings_open_links_always_hint">Utiliser \'Toujours\' lors de l\'ouverture d\'un lien Spotify</string>
@@ -239,18 +225,18 @@
     <string name="offline_act_toast_profile_deleted">Profil supprimé</string>
     <string name="offline_act_toast_cache_cleared">Cache effacé avec succès</string>
     <string name="offline_act_toast_all_data_cleared">Toutes les données ont été effacées</string>
+    <string name="offline_act_toast_third_party_cleared">Connexions tierces effacées</string>
     <string name="main_update_available">Une nouvelle mise à jour est disponible</string>
     <string name="main_version_label">v%1$s · %2$s</string>
     <string name="main_settings_content_description">Paramètres</string>
     <string name="main_webview_version">Webview : %1$s</string>
     <string name="main_webview_version_unknown">N/A</string>
     <string name="main_account_saved">Compte enregistré</string>
-    <string name="main_profile_save_failed">Impossible d\'enregistrer le profil chiffré</string>
     <string name="main_profile_load_failed">Le profil n\'a pas pu être chargé</string>
     <string name="main_profile_deleted">Profil supprimé</string>
-    <string name="main_profile_delete_failed">Impossible de mettre à jour les profils chiffrés</string>
     <string name="main_cache_cleared">Cache effacé avec succès</string>
     <string name="main_all_data_cleared">Toutes les données ont été effacées, veuillez vous reconnecter</string>
+    <string name="main_third_party_cleared">Connexions tierces effacées</string>
     <string name="main_timer_remaining">%1$d:%2$02d min restantes</string>
     <string name="main_sleep_timer_title">Mise en veille automatique</string>
     <string name="main_sleep_timer_emoji">⏰</string>
@@ -348,12 +334,12 @@
     <string name="dl_notif_failed">%1$d échoué(s)</string>
     <string name="dl_notif_skipped">%1$d ignoré(s)</string>
     <string name="dl_notif_queued">%1$d en attente</string>
-    <string name="dl_notif_preparing">Préparation du téléchargement...</string>
+    <string name="dl_notif_preparing">Préparation du téléchargement…</string>
     <string name="dl_notif_action_skip">Passer</string>
     <string name="dl_notif_action_cancel">Annuler</string>
 
     <string name="bridge_player_unlocked">Lecteur déverrouillé</string>
-    <string name="bridge_reloading">Rechargement...</string>
+    <string name="bridge_reloading">Rechargement…</string>
 
     <string name="service_disabled_message">Le service n\'est pas activé</string>
 
@@ -361,7 +347,6 @@
     <string name="widget_player_description">Commandes de lecture pour Spotilol</string>
     <string name="widget_art_name">Pochette Spotilol</string>
     <string name="widget_art_description">Pochette d\'album du morceau en cours</string>
-    <string name="widget_action_open_app">Ouvrir Spotilol</string>
     <string name="widget_action_shuffle">Lecture aléatoire</string>
     <string name="widget_action_repeat">Répéter</string>
     <string name="widget_empty_title">Spotilol</string>
@@ -369,4 +354,57 @@
     <string name="settings_section_privacy">Confidentialité</string>
     <string name="settings_telemetry">Données d\'utilisation et de performance</string>
     <string name="settings_telemetry_subtitle">Partager anonymement les données d\'utilisation et de performance. Désactivé par défaut ; les rapports de plantage sont toujours envoyés.</string>
+
+    <string name="dl_status_invalid_request">Demande de téléchargement non valide</string>
+    <string name="dl_status_no_current_track">Impossible d\'identifier le morceau actuel</string>
+    <string name="dl_status_already_downloading">Ce morceau est déjà en cours de téléchargement</string>
+    <string name="dl_status_no_tracks">Aucun morceau trouvé</string>
+    <string name="dl_status_no_downloadable_tracks">Aucun morceau téléchargeable trouvé</string>
+    <string name="dl_status_already_saved_to">Déjà enregistré dans %1$s</string>
+    <string name="dl_status_saved_to">Enregistré dans %1$s</string>
+    <string name="dl_status_failed">Échec du téléchargement : %1$s</string>
+    <string name="dl_status_cancelled">Téléchargement annulé</string>
+    <string name="dl_stage_queued">En file d\'attente</string>
+    <string name="dl_progress_queued">%1$d morceaux en file d\'attente — %2$s</string>
+    <string name="dl_progress_resolving_audio">Résolution de l\'audio…</string>
+    <string name="dl_stage_resolving_audio">Résolution de l\'audio</string>
+    <string name="dl_progress_resolving">Résolution…</string>
+    <string name="dl_progress_downloading_audio">Téléchargement de l\'audio…</string>
+    <string name="dl_progress_saving">Enregistrement…</string>
+    <string name="dl_progress_converting">Conversion en %1$s</string>
+    <string name="dl_progress_preparing_m4a">Préparation du M4A</string>
+    <string name="dl_progress_writing_tags">Écriture des tags…</string>
+    <string name="dl_stage_reading_playlist">Lecture de la playlist</string>
+    <string name="dl_progress_already_saved">Déjà enregistré</string>
+    <string name="dl_progress_saved">Enregistré</string>
+    <string name="dl_progress_skipped">Ignoré</string>
+    <string name="dl_progress_cancelled">Annulé</string>
+    <string name="dl_progress_failed_skipping">Échec — ignoré</string>
+    <string name="dl_progress_track_of">%1$d/%2$d · %3$s — %4$s</string>
+    <string name="dl_summary_saved_one">1 morceau enregistré</string>
+    <string name="dl_summary_saved_many">%1$d morceaux enregistrés</string>
+    <string name="dl_summary_skipped">%1$d ignorés</string>
+    <string name="dl_summary_failed">%1$d en échec</string>
+    <string name="dl_summary_cancelled">annulé à %1$d/%2$d</string>
+    <string name="dl_progress_summary">%1$s — %2$s</string>
+    <string name="dl_collection_default">Collection</string>
+    <string name="dl_error_unknown">erreur inconnue</string>
+    <string name="dl_error_conversion_failed">Échec de la conversion audio</string>
+    <string name="dl_error_could_not_save">Impossible d\'enregistrer le fichier</string>
+    <string name="dl_error_search_failed">Échec de la recherche sur YouTube Music</string>
+    <string name="dl_error_no_results">Aucun résultat sur YouTube Music</string>
+    <string name="dl_error_no_song_results">Aucun résultat de morceaux sur YouTube Music</string>
+    <string name="dl_error_no_match">Aucun morceau correspondant sur YouTube Music</string>
+    <string name="dl_error_stream_unavailable">Flux indisponible : %1$s</string>
+    <string name="dl_error_stream_unavailable_detail">Flux indisponible : %1$s (%2$s)</string>
+    <string name="dl_error_empty_stream_url">URL de flux vide depuis YouTube</string>
+    <string name="dl_error_http">Le flux a renvoyé HTTP %1$d</string>
+    <string name="dl_error_connection_reset">Connexion réinitialisée</string>
+    <string name="dl_error_download">Erreur de téléchargement</string>
+
+    <string name="settings_fast_startup">Démarrage rapide</string>
+    <string name="settings_fast_startup_subtitle">Démarrer instantanément sans attendre l\'animation de démarrage</string>
+
+    <string name="settings_theme">Thème</string>
+    <string name="settings_theme_dynamic">Dynamique (couleurs du système)</string>
 </resources>

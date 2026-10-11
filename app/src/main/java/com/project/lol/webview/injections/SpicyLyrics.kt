@@ -7,7 +7,6 @@ object SpicyLyrics {
             window.__spicyLyrics = true;
 
             var cache = {};
-            var inflight = {};
 
             function enabled(){ return window.__spicyLyricsEnabled !== false; }
 
@@ -36,36 +35,27 @@ object SpicyLyrics {
                 } catch(e){ return { title:'', artist:'', duration:0 }; }
             }
 
-            function resolveAsync(id){
-                if (!enabled() || !id || id.length !== 22) return Promise.resolve(null);
-                if (Object.prototype.hasOwnProperty.call(cache, id)) return Promise.resolve(cache[id]);
-                if (inflight[id]) return inflight[id];
+            function resolve(id){
+                if (!enabled() || !id || id.length !== 22) return null;
+                if (Object.prototype.hasOwnProperty.call(cache, id)) return cache[id];
                 var meta = trackMeta();
-                var task = Promise.resolve().then(function(){
-                    return AndBridge.spicyLyrics(id, meta.title, meta.artist, meta.duration);
-                }).then(function(raw){
-                    var payload = null;
-                    if (raw && raw !== 'null') { try { payload = JSON.parse(raw); } catch(e){ payload = null; } }
-                    var unsynced = payload && payload.lyrics && payload.lyrics.syncType === 'UNSYNCED';
-                    if (!(unsynced && !meta.title)) cache[id] = payload;
-                    return payload;
-                }).catch(function(){ return null; }).then(function(payload){
-                    delete inflight[id];
-                    return payload;
-                });
-                inflight[id] = task;
-                return task;
+                var payload = null;
+                try {
+                    var raw = AndBridge.spicyLyrics(id, meta.title, meta.artist, meta.duration);
+                    if (raw && raw !== 'null') payload = JSON.parse(raw);
+                } catch(e){ payload = null; }
+                var unsynced = payload && payload.lyrics && payload.lyrics.syncType === 'UNSYNCED';
+                if (!(unsynced && !meta.title)) cache[id] = payload;
+                return payload;
             }
 
             function patchMetadata(json){
-                if (!json || json.has_lyrics !== undefined) return Promise.resolve(false);
+                if (!json || json.has_lyrics !== undefined) return false;
                 var id = idFromUri(json.canonical_uri);
-                if (!id) return Promise.resolve(false);
-                return resolveAsync(id).then(function(payload){
-                    if (!payload) return false;
-                    json.has_lyrics = true;
-                    return true;
-                });
+                if (!id) return false;
+                if (!resolve(id)) return false;
+                json.has_lyrics = true;
+                return true;
             }
 
             function jsonResponse(obj){
@@ -86,15 +76,14 @@ object SpicyLyrics {
                     if (isMeta) {
                         if (resp.status !== 200) return resp;
                         return resp.clone().json().then(function(json){
-                            return patchMetadata(json).then(function(patched){
-                                return patched ? jsonResponse(json) : resp;
-                            });
+                            if (!patchMetadata(json)) return resp;
+                            return jsonResponse(json);
                         }).catch(function(){ return resp; });
                     }
                     if (resp.status !== 404) return resp;
-                    return resolveAsync(lyr[1]).then(function(payload){
-                        return payload ? jsonResponse(payload) : resp;
-                    });
+                    var payload = resolve(lyr[1]);
+                    if (!payload) return resp;
+                    return jsonResponse(payload);
                 });
             };
 
@@ -129,23 +118,21 @@ object SpicyLyrics {
                 if (typeof window.splOnTrackChange !== 'function') return;
                 window.splOnTrackChange(function(uri, id){
                     if (!enabled() || !id) return;
-                    resolveAsync(id).then(function(payload){
-                        if (!payload) return;
-                        var tries = 0;
-                        var iv = setInterval(function(){
-                            tries++;
-                            var b = document.querySelector('button[data-testid="lyrics-button"]');
-                            if (b && !b.disabled) { clearInterval(iv); return; }
-                            nudgeAvailability();
-                            if (tries >= 8) clearInterval(iv);
-                        }, 2500);
-                    });
+                    if (!resolve(id)) return;
+                    var tries = 0;
+                    var iv = setInterval(function(){
+                        tries++;
+                        var b = document.querySelector('button[data-testid="lyrics-button"]');
+                        if (b && !b.disabled) { clearInterval(iv); return; }
+                        nudgeAvailability();
+                        if (tries >= 8) clearInterval(iv);
+                    }, 2500);
                 });
             }
 
             window.spicyLyrics = {
-                refresh: function(){ cache = {}; inflight = {}; },
-                has: function(id){ return resolveAsync(id); },
+                refresh: function(){ cache = {}; },
+                has: function(id){ return !!resolve(id); },
                 nudge: nudgeAvailability
             };
 

@@ -147,7 +147,7 @@ object SpotilolPlayer {
                         '#spotilolPlayerControls.spl-fsmode.spl-mini .spl-edgebar .spl-fill{background:#fff}',
                         '#spotilolPlayerControls.spl-full{position:fixed!important;top:0!important;bottom:0!important;left:0!important;right:0!important;max-width:none!important;margin:0!important;border:none!important;border-radius:0!important;box-shadow:none!important;padding:0 24px 28px!important;overflow:hidden!important;background:linear-gradient(180deg,var(--spl-np-color,#404040) 0%,#121212 78%)!important;font-family:var(--encore-body-font-stack,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif);animation:splNpIn .32s cubic-bezier(.2,.8,.2,1)}',
                         '@keyframes splNpIn{from{transform:translateY(100%)}to{transform:none}}',
-                        '#spotilolPlayerControls.spl-full .spl-np-head{display:flex;align-items:center;justify-content:space-between;order:0;height:64px;flex-shrink:0;margin:0 -12px}',
+                        '#spotilolPlayerControls.spl-full .spl-np-head{display:flex;align-items:center;justify-content:space-between;order:0;height:64px;flex-shrink:0;margin:6vh -12px 0}',
                         '#spotilolPlayerControls.spl-full .spl-np-head .spl-btn{color:#fff}',
                         '#spotilolPlayerControls.spl-full .spl-np-head svg{width:24px;height:24px}',
                         '#spotilolPlayerControls.spl-full .spl-np-title{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#fff}',

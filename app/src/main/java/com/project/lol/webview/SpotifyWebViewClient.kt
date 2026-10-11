@@ -1,10 +1,9 @@
 package com.project.lol.webview
 
 import android.graphics.Bitmap
-import android.content.Intent
 import android.net.Uri
-import com.project.lol.security.WebSecurityPolicy
-import com.project.lol.bridge.OriginScopedBridge
+import android.os.Handler
+import android.os.Looper
 import com.project.lol.util.Logger
 import android.webkit.CookieManager
 import android.webkit.RenderProcessGoneDetail
@@ -18,6 +17,7 @@ import android.net.http.SslError
 import androidx.webkit.ScriptHandler
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
+import com.project.lol.ui.theme.ThemeController
 import com.project.lol.webview.helpers.*
 import com.project.lol.webview.injections.*
 import java.io.ByteArrayInputStream
@@ -37,28 +37,10 @@ class SpotifyWebViewClient(
     private var prefsListener: android.content.SharedPreferences.OnSharedPreferenceChangeListener? = null
     private var boundPrefs: android.content.SharedPreferences? = null
     private var pageStartedAt = 0L
-    private var navigationEpoch = 0L
     private var docStartHandler: ScriptHandler? = null
     private var docStartJs: String? = null
     private var docStartView: WebView? = null
     private var docStartJustRegistered = false
-
-    override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-        if (!request.isForMainFrame) return false // subframes never have native authority
-        return handleNavigation(view, request.url.toString(), request.hasGesture())
-    }
-
-    @Deprecated("Deprecated in Java")
-    override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean =
-        handleNavigation(view, url, false)
-
-    private fun handleNavigation(view: WebView, url: String, userGesture: Boolean): Boolean {
-        if (WebSecurityPolicy.isNavigation(url)) return false
-        if (userGesture && WebSecurityPolicy.httpsHost(url) != null) {
-            runCatching { view.context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
-        }
-        return true
-    }
 
     override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
         super.doUpdateVisitedHistory(view, url, isReload)
@@ -69,7 +51,7 @@ class SpotifyWebViewClient(
 
     override fun onPageFinished(view: WebView?, url: String?) {
         super.onPageFinished(view, url)
-        if (view == null || url == null || !WebSecurityPolicy.isNavigation(url)) return
+        if (view == null || url == null) return
 
         val elapsed = if (pageStartedAt > 0) System.currentTimeMillis() - pageStartedAt else -1
         pageStartedAt = 0
@@ -83,7 +65,7 @@ class SpotifyWebViewClient(
             return
         }
 
-        if (WebSecurityPolicy.isAccounts(url) && Uri.parse(url).path == "/login") {
+        if (isLoginPageUrl(url)) {
             Logger.s(TAG, "route: classic login button")
             onPageFinishedClean(view, ClassicLoginButton.CONTENT)
         }
@@ -93,22 +75,17 @@ class SpotifyWebViewClient(
 
         if (!loggedIn) {
             Logger.i(TAG, "not logged in, arming login detection")
-            if (WebSecurityPolicy.isAccounts(url) || WebSecurityPolicy.isPlayer(url)) {
-                onPageFinishedClean(view, LoginDetection.CONTENT)
-            }
+            onPageFinishedClean(view, LoginDetection.CONTENT)
             return
         }
 
-        if (!WebSecurityPolicy.isPlayer(url)) return
-        val epoch = navigationEpoch
         Logger.s(TAG, "logged in, injecting player control in 500ms")
 
-        view.postDelayed({
-            if (epoch == navigationEpoch && WebSecurityPolicy.isPlayer(view.url)) injectPlayerControl(view)
+        Handler(Looper.getMainLooper()).postDelayed({
+            injectPlayerControl(view)
         }, 500)
 
         view.evaluateJavascript(LogoutCheck.CONTENT) { result ->
-            if (epoch != navigationEpoch || !WebSecurityPolicy.isPlayer(view.url)) return@evaluateJavascript
             Logger.d(TAG, "logout check: $result")
             if (result == "\"out\"") {
                 Logger.w(TAG, "session expired, back to login")
@@ -121,13 +98,6 @@ class SpotifyWebViewClient(
 
     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
         super.onPageStarted(view, url, favicon)
-        navigationEpoch++
-        if (!WebSecurityPolicy.isNavigation(url)) {
-            Logger.w(TAG, "navigation blocked: $url")
-            view?.stopLoading()
-            onWebViewError?.invoke(-1, "Untrusted navigation blocked")
-            return
-        }
         pageStartedAt = System.currentTimeMillis()
         val prefs = view?.context?.getSharedPreferences("spotilol_prefs", 0)
 
@@ -197,17 +167,18 @@ class SpotifyWebViewClient(
             add(PowerSave.CONTENT)
             add(SettingsFix.CONTENT)
             add(VideoPark.CONTENT)
+            add(NavDuck.CONTENT)
         }
         return parts.joinToString("\n") { "try{\n$it\n}catch(e){}" }
     }
 
-    private fun isWebPlayerUrl(url: String?): Boolean = WebSecurityPolicy.isPlayer(url)
+    private fun isWebPlayerUrl(url: String?): Boolean =
+        url != null && (url == WEB_PLAYER_ORIGIN || url.startsWith("$WEB_PLAYER_ORIGIN/"))
 
     override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
         Logger.e(TAG, "renderer process gone: crashed=${detail?.didCrash()}")
         view?.let {
             it.stopLoading()
-            OriginScopedBridge.remove(it)
             it.destroy()
         }
         onRenderProcessGone?.invoke()
@@ -225,7 +196,7 @@ class SpotifyWebViewClient(
         val url = request?.url?.toString().orEmpty()
         if (request?.isForMainFrame != true) {
             val line = "sub resource error $code ($desc) $url method=${request?.method}"
-            if (WebSecurityPolicy.isSpotifyHost(url)) Logger.w(TAG, line) else Logger.d(TAG, line)
+            if (isSpotifyHost(url)) Logger.w(TAG, line) else Logger.d(TAG, line)
             return
         }
         Logger.e(TAG, "main frame error $code ($desc) $url method=${request.method}")
@@ -243,7 +214,7 @@ class SpotifyWebViewClient(
         if (request?.isForMainFrame != true) {
             if (status >= 400) {
                 val line = "sub resource http $status $url"
-                if (WebSecurityPolicy.isSpotifyHost(url)) Logger.w(TAG, line) else Logger.d(TAG, line)
+                if (isSpotifyHost(url)) Logger.w(TAG, line) else Logger.d(TAG, line)
             }
             return
         }
@@ -272,9 +243,24 @@ class SpotifyWebViewClient(
         val url = request.url.toString()
 
         if (isAnalyticsDomain(url)) {
-            val headers = mapOf("Access-Control-Allow-Origin" to "*")
-            return WebResourceResponse("text/plain", "utf-8", 200, "OK", headers,
-                ByteArrayInputStream(ByteArray(0)))
+            val origin = request.requestHeaders.entries
+                .firstOrNull { it.key.equals("Origin", ignoreCase = true) }?.value
+                ?: WEB_PLAYER_ORIGIN
+            val headers = HashMap<String, String>(8)
+            headers["Access-Control-Allow-Origin"] = origin
+            headers["Access-Control-Allow-Credentials"] = "true"
+            if (request.method.equals("OPTIONS", ignoreCase = true)) {
+                headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+                headers["Access-Control-Allow-Headers"] = request.requestHeaders.entries
+                    .firstOrNull { it.key.equals("Access-Control-Request-Headers", ignoreCase = true) }?.value
+                    ?: DEFAULT_ALLOWED_HEADERS
+                headers["Access-Control-Max-Age"] = "600"
+                return WebResourceResponse("text/plain", "utf-8", 200, "OK", headers,
+                    ByteArrayInputStream(ByteArray(0)))
+            }
+            headers["Content-Type"] = "application/json"
+            return WebResourceResponse("application/json", "utf-8", 200, "OK", headers,
+                ByteArrayInputStream(EMPTY_JSON))
         }
 
         if (AdIdStore.matches(url)) {
@@ -286,13 +272,12 @@ class SpotifyWebViewClient(
         // Only ad-audio candidates and Google auth URLs need the native sniff below.
         // Everything else goes straight to the WebView, which would otherwise fetch
         // it a second time after this blocking request returns null.
-        if ((!isAdAudioUrl(url) && !isGoogleAuthUrl(url)) ||
-            WebSecurityPolicy.httpsHost(url) == null || request.method !in setOf("GET", "HEAD")) return null
+        if (!isAdAudioUrl(url) && !isGoogleAuthUrl(url)) return null
         try {
             val conn = URL(url).openConnection() as HttpURLConnection
             try {
                 conn.requestMethod = request.method
-                conn.instanceFollowRedirects = false
+                conn.instanceFollowRedirects = true
                 conn.connectTimeout = 5000
                 conn.readTimeout = 5000
                 val isGoogle = isGoogleAuthUrl(url)
@@ -340,13 +325,21 @@ class SpotifyWebViewClient(
         return null
     }
 
-    private fun isGoogleAuthUrl(url: String?): Boolean = WebSecurityPolicy.isGoogleAuth(url)
+    private fun isGoogleAuthUrl(url: String?): Boolean {
+        if (url == null) return false
+        val host = runCatching { android.net.Uri.parse(url).host }.getOrNull()
+            ?.lowercase() ?: return false
+        return host == "google.com" ||
+            host.endsWith(".google.com") ||
+            host.contains(".google.") ||
+            host.endsWith(".youtube.com") ||
+            host == "youtube.com"
+    }
 
     private fun injectPlayerControl(view: WebView) {
-        if (!WebSecurityPolicy.isPlayer(view.url)) return
         val prefs = view.context.getSharedPreferences("spotilol_prefs", 0)
         val autoPlayMode = prefs.getString("APlayMode", "disabled") ?: "disabled"
-        val closeNowPlay = prefs.getBoolean("CloseNowPlay", true)
+        val closeNowPlay = prefs.getBoolean("CloseNowPlay", false)
         val amoledEnabled = prefs.getBoolean("AmoledTheme", false)
         val customCss = prefs.getString("CustomCss", "") ?: ""
         val playerMode = prefs.getString("PlayerMode", "spotilol") ?: "spotilol"
@@ -433,7 +426,7 @@ class SpotifyWebViewClient(
         }
         val cleanJs = JsUtils.stripConsoleLogs(js) + "\n" +
                 buildAmoledJs(amoledEnabled) + "\n" +
-                AccentTheme.buildAccentJs(view.context) + "\n" +
+                ThemeController.buildAccentJs(view.context) + "\n" +
                 buildCustomCssJs(customCss) + "\n" +
                 LyricsTheme.buildLyricsStyleJs(lyricsStyle)
         if (playerMode == "original") {
@@ -456,7 +449,6 @@ class SpotifyWebViewClient(
 
         prefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             val wv = currentWebView ?: return@OnSharedPreferenceChangeListener
-            if (!WebSecurityPolicy.isPlayer(wv.url)) return@OnSharedPreferenceChangeListener
             Logger.d(TAG, "pref changed: $key")
             when (key) {
                 "PlayerMode" ->
@@ -466,7 +458,7 @@ class SpotifyWebViewClient(
                     wv.evaluateJavascript("if(window.__splApplyPowerSave) window.__splApplyPowerSave($on);", null)
                 }
                 "CloseNowPlay" -> {
-                    val closeNp = prefs.getBoolean("CloseNowPlay", true)
+                    val closeNp = prefs.getBoolean("CloseNowPlay", false)
                     wv.evaluateJavascript("window.closeNpPref=$closeNp;", null)
                 }
                 "APlayMode" -> {
@@ -479,8 +471,8 @@ class SpotifyWebViewClient(
                     wv.evaluateJavascript(js, null)
                     wv.evaluateJavascript(LyricsTheme.buildLyricsStyleJs(prefs.getString("LyricsStyle", LyricsTheme.DEFAULT_STYLE) ?: LyricsTheme.DEFAULT_STYLE), null)
                 }
-                "PaletteSeed", "MaterialYou" ->
-                    wv.evaluateJavascript(AccentTheme.buildAccentJs(wv.context), null)
+                "ThemePreset", "MaterialYou" ->
+                    wv.evaluateJavascript(ThemeController.buildAccentJs(wv.context), null)
                 "TakeControl" -> {
                     val on = prefs.getBoolean("TakeControl", true)
                     wv.evaluateJavascript("window.__splTakeControl=$on;", null)
@@ -551,9 +543,25 @@ class SpotifyWebViewClient(
         view.evaluateJavascript(JsUtils.stripConsoleLogs(js), null)
     }
 
+    private fun isLoginPageUrl(url: String): Boolean {
+        val uri = runCatching { Uri.parse(url) }.getOrNull() ?: return false
+        if (uri.host?.lowercase() != "accounts.spotify.com") return false
+        val path = uri.path ?: return false
+        return LOGIN_PATH.matches(path)
+    }
+
+    private fun isSpotifyHost(url: String?): Boolean {
+        val host = runCatching { Uri.parse(url) }.getOrNull()?.host?.lowercase() ?: return false
+        return host == "spotify.com" || host.endsWith(".spotify.com")
+    }
+
     companion object {
         private const val TAG = "wv"
         private const val WEB_PLAYER_ORIGIN = "https://open.spotify.com"
+        private val LOGIN_PATH = Regex("^/(?:[a-zA-Z0-9]{2,8}(?:-[a-zA-Z0-9]{2,8})?/)?login/?$")
+        private val EMPTY_JSON = "{}".toByteArray()
+        private const val DEFAULT_ALLOWED_HEADERS =
+            "content-type, client-token, authorization, accept, app-platform, spotify-app-version"
         private const val DESKTOP_UA =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
 

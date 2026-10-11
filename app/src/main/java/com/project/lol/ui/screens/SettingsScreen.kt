@@ -56,8 +56,6 @@ import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.SecondaryScrollableTabRow
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -95,7 +93,6 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
@@ -108,8 +105,12 @@ import com.project.lol.offline.DownloadFormat
 import com.project.lol.offline.DownloadPrefs
 import com.project.lol.profile.ProfileManager
 import com.project.lol.service.MediaNotificationService
+import com.project.lol.service.OfflineMediaService
+import com.project.lol.ui.SplashActivity
+import com.project.lol.ui.theme.ThemePresets
 import com.project.lol.ui.components.ChangelogDialog
 import com.project.lol.ui.theme.SpotifyTheme
+import com.project.lol.util.AppLocale
 import com.project.lol.util.BuildInfo
 import com.project.lol.util.GitHubApi
 import com.project.lol.util.GitHubRelease
@@ -151,6 +152,7 @@ import compose.icons.tablericons.PlayerPlay
 import compose.icons.tablericons.Playlist
 import compose.icons.tablericons.Power
 import compose.icons.tablericons.RotateClockwise2
+import compose.icons.tablericons.Rocket
 import compose.icons.tablericons.Shield
 import compose.icons.tablericons.Trash
 import compose.icons.tablericons.TrashOff
@@ -161,35 +163,9 @@ import compose.icons.tablericons.WaveSine
 import compose.icons.tablericons.X
 import java.text.SimpleDateFormat
 import java.util.Date
-import java.util.Locale
-import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private val PalettePresets = listOf(
-    R.string.settings_palette_default to null,
-    R.string.settings_palette_spotify_green to "#1DB954",
-    R.string.settings_palette_purple to "#BB86FC",
-    R.string.settings_palette_blue to "#2196F3",
-    R.string.settings_palette_red to "#E53935",
-    R.string.settings_palette_orange to "#FB8C00",
-    R.string.settings_palette_pink to "#EC407A",
-    R.string.settings_palette_teal to "#26A69A",
-    R.string.settings_palette_yellow to "#FDD835",
-    R.string.settings_palette_cyan to "#00BCD4"
-)
-
-private fun parsePaletteColor(hex: String?): Color? {
-    if (hex.isNullOrBlank()) return null
-    return runCatching { Color(android.graphics.Color.parseColor(hex)) }.getOrNull()
-}
-
-private fun formatHex(color: Color): String {
-    val r = (color.red * 255f).roundToInt()
-    val g = (color.green * 255f).roundToInt()
-    val b = (color.blue * 255f).roundToInt()
-    return "#" + String.format(Locale.US, "%02X%02X%02X", r, g, b)
-}
 private const val DEBUG_UNLOCK_TAPS = 5
 
 private enum class SettingsTab(@StringRes val labelRes: Int) {
@@ -217,14 +193,15 @@ fun SettingsContent(
     onLandscapeModeChange: (Boolean) -> Unit,
     keepScreenOn: Boolean,
     onKeepScreenOnChange: (Boolean) -> Unit,
-    paletteSeed: String?,
-    onPaletteSeedChange: (String?) -> Unit,
+    themePreset: String,
+    onThemePresetChange: (String) -> Unit,
     onOfflineModeChange: (Boolean) -> Unit,
     onSaveProfile: (String, String) -> Unit,
     onLoadProfile: (String) -> Unit,
     onDeleteProfile: (String) -> Unit,
     onClearCache: () -> Unit,
     onClearData: () -> Unit,
+    onClearThirdParty: () -> Unit,
     onDebugToggle: (Boolean) -> Unit = {},
     blockServiceWorker: Boolean,
     onBlockServiceWorkerChange: (Boolean) -> Unit
@@ -232,7 +209,7 @@ fun SettingsContent(
     var autoplayMode by remember { mutableStateOf(prefs.getString("APlayMode", "disabled") ?: "disabled") }
     var takeControl by remember { mutableStateOf(prefs.getBoolean("TakeControl", true)) }
     var andAuto by remember { mutableStateOf(prefs.getBoolean("AndAuto", true)) }
-    var closeNowPlay by remember { mutableStateOf(prefs.getBoolean("CloseNowPlay", true)) }
+    var closeNowPlay by remember { mutableStateOf(prefs.getBoolean("CloseNowPlay", false)) }
     // dead code: gui mode is fixed to mobile css and js, see the appearance section
     // var guiMode by remember { mutableStateOf(prefs.getString("GuiMode", "csshack") ?: "csshack") }
     var customCss by remember { mutableStateOf(prefs.getString("CustomCss", "") ?: "") }
@@ -252,9 +229,12 @@ fun SettingsContent(
     var lyricsStyle by remember { mutableStateOf(prefs.getString("LyricsStyle", LyricsTheme.DEFAULT_STYLE) ?: LyricsTheme.DEFAULT_STYLE) }
     var spicyLyricsEnabled by remember { mutableStateOf(prefs.getBoolean("SpicyLyrics", true)) }
     var telemetryEnabled by remember { mutableStateOf(prefs.getBoolean(Telemetry.KEY, false)) }
+    var fastStartup by remember { mutableStateOf(prefs.getBoolean("FastStartup", false)) }
 
     val context = LocalContext.current
     val resources = LocalResources.current
+    var appLanguage by remember { mutableStateOf(AppLocale.current(context)) }
+    var showLanguageDialog by remember { mutableStateOf(false) }
     var profiles by remember { mutableStateOf(ProfileManager.getProfiles(context)) }
 
     var showSaveAccountDialog by remember { mutableStateOf(false) }
@@ -262,12 +242,13 @@ fun SettingsContent(
     var accountNameInput by remember { mutableStateOf("") }
     var showClearCacheDialog by remember { mutableStateOf(false) }
     var showClearDataDialog by remember { mutableStateOf(false) }
+    var showClearThirdPartyDialog by remember { mutableStateOf(false) }
     var showAutoPlayDialog by remember { mutableStateOf(false) }
     var showPlayerModeDialog by remember { mutableStateOf(false) }
     // dead code: the gui mode selector was removed, keep the flag for the wide window refactor
     // var showGuiModeDialog by remember { mutableStateOf(false) }
     var showCustomCssDialog by remember { mutableStateOf(false) }
-    var showPaletteDialog by remember { mutableStateOf(false) }
+    var showThemeDialog by remember { mutableStateOf(false) }
     var showChangelogDialog by remember { mutableStateOf(false) }
     var loggingOn by remember { mutableStateOf(Logger.isEnabled()) }
     var showDevlogDialog by remember { mutableStateOf(false) }
@@ -288,6 +269,14 @@ fun SettingsContent(
     fun refreshFolderState() {
         dlFolderPath = DownloadPrefs.folderDisplayPath(context)
         dlFolderLabel = DownloadPrefs.folderLabel(context)
+    }
+    fun applyLanguageRestart() {
+        runCatching { context.stopService(Intent(context, MediaNotificationService::class.java)) }
+        runCatching { context.stopService(Intent(context, OfflineMediaService::class.java)) }
+        val intent = Intent(context, SplashActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        runCatching { context.startActivity(intent) }
     }
     val folderPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
@@ -387,6 +376,15 @@ fun SettingsContent(
                     title = stringResource(R.string.settings_section_appearance),
                     icon = TablerIcons.Palette
                 ) {
+                    val systemLanguageLabel = stringResource(R.string.settings_language_system)
+                    SettingTile(
+                        title = stringResource(R.string.settings_language),
+                        subtitle = AppLocale.nativeName(appLanguage) ?: systemLanguageLabel,
+                        icon = TablerIcons.Language,
+                        onClick = { showLanguageDialog = true }
+                    )
+
+                    HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
                     // dead code: gui mode selector. only mobile css and js is implemented,
                     // wide window and none need a refactor across the webview injections,
                     // so the value is fixed and the label is no longer read from prefs.
@@ -427,16 +425,13 @@ fun SettingsContent(
 
                     HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
 
-                    val accentLabel = when {
-                        materialYou -> stringResource(R.string.settings_accent_dynamic)
-                        paletteSeed.isNullOrBlank() -> stringResource(R.string.settings_accent_default)
-                        else -> stringResource(R.string.settings_accent_custom, paletteSeed)
-                    }
+                    val themeLabel = ThemePresets.byId[themePreset]?.let { "${it.family} · ${it.name}" }
+                        ?: themePreset
                     SettingTile(
-                        title = stringResource(R.string.settings_accent_color),
-                        subtitle = accentLabel,
+                        title = stringResource(R.string.settings_theme),
+                        subtitle = if (materialYou) stringResource(R.string.settings_theme_dynamic) else themeLabel,
                         icon = TablerIcons.ColorSwatch,
-                        onClick = { showPaletteDialog = true }
+                        onClick = { showThemeDialog = true }
                     )
 
                     HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
@@ -831,11 +826,33 @@ fun SettingsContent(
 
                     HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
 
+                    SettingSwitchTile(
+                        title = stringResource(R.string.settings_fast_startup),
+                        subtitle = stringResource(R.string.settings_fast_startup_subtitle),
+                        icon = TablerIcons.Rocket,
+                        checked = fastStartup,
+                        onCheckedChange = {
+                            fastStartup = it
+                            prefs.edit().putBoolean("FastStartup", it).apply()
+                        }
+                    )
+
+                    HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
+
                     SettingTile(
                         title = stringResource(R.string.settings_empty_cache),
                         subtitle = stringResource(R.string.settings_empty_cache_subtitle),
                         icon = TablerIcons.Brush,
                         onClick = { showClearCacheDialog = true }
+                    )
+
+                    HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
+
+                    SettingTile(
+                        title = stringResource(R.string.settings_clear_third_party),
+                        subtitle = stringResource(R.string.settings_clear_third_party_subtitle),
+                        icon = TablerIcons.User,
+                        onClick = { showClearThirdPartyDialog = true }
                     )
 
                     HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
@@ -980,14 +997,30 @@ fun SettingsContent(
         }
     }
 
-    if (showPaletteDialog) {
-        PaletteDialog(
-            currentSeed = paletteSeed,
-            onSave = { hex ->
-                onPaletteSeedChange(hex)
-                showPaletteDialog = false
+    if (showThemeDialog) {
+        ThemeDialog(
+            currentPreset = themePreset,
+            onSelect = { id ->
+                onThemePresetChange(id)
+                showThemeDialog = false
             },
-            onDismiss = { showPaletteDialog = false }
+            onDismiss = { showThemeDialog = false }
+        )
+    }
+
+    if (showLanguageDialog) {
+        LanguageDialog(
+            current = appLanguage,
+            systemLabel = stringResource(R.string.settings_language_system),
+            onSelect = { tag ->
+                showLanguageDialog = false
+                if (tag != appLanguage) {
+                    appLanguage = tag
+                    AppLocale.set(context, tag)
+                    applyLanguageRestart()
+                }
+            },
+            onDismiss = { showLanguageDialog = false }
         )
     }
 
@@ -1194,6 +1227,19 @@ fun SettingsContent(
         )
     }
 
+    if (showClearThirdPartyDialog) {
+        ConfirmationDialog(
+            title = stringResource(R.string.settings_clear_third_party),
+            message = stringResource(R.string.settings_clear_third_party_message),
+            confirmText = stringResource(R.string.settings_clear_third_party),
+            onConfirm = {
+                showClearThirdPartyDialog = false
+                onClearThirdParty()
+            },
+            onDismiss = { showClearThirdPartyDialog = false }
+        )
+    }
+
     if (showDevlogDialog) {
         LoggerDialog(onDismiss = { showDevlogDialog = false })
     }
@@ -1201,194 +1247,96 @@ fun SettingsContent(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun PaletteDialog(
-    currentSeed: String?,
-    onSave: (String?) -> Unit,
+fun ThemeDialog(
+    currentPreset: String,
+    onSelect: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val initial = parsePaletteColor(currentSeed) ?: Color(0xFFE0E0E0)
-    var red by remember { mutableFloatStateOf(initial.red * 255f) }
-    var green by remember { mutableFloatStateOf(initial.green * 255f) }
-    var blue by remember { mutableFloatStateOf(initial.blue * 255f) }
-    var useDefault by remember { mutableStateOf(currentSeed.isNullOrBlank()) }
-    val preview = Color(red / 255f, green / 255f, blue / 255f)
-
-    fun pick(hex: String?) {
-        val c = parsePaletteColor(hex)
-        if (c == null) {
-            useDefault = true
-            red = 224f
-            green = 224f
-            blue = 224f
-        } else {
-            useDefault = false
-            red = c.red * 255f
-            green = c.green * 255f
-            blue = c.blue * 255f
-        }
-    }
-
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(28.dp),
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    imageVector = TablerIcons.ColorSwatch,
+                    imageVector = TablerIcons.Palette,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary
                 )
                 Spacer(Modifier.width(10.dp))
                 Text(
-                    text = stringResource(R.string.settings_accent_color),
+                    text = stringResource(R.string.settings_theme),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
             }
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
+            Column(
+                modifier = Modifier
+                    .height(420.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                ThemePresets.all.forEach { preset ->
+                    val selected = preset.id == currentPreset
+                    Row(
                         modifier = Modifier
-                            .size(34.dp)
-                            .clip(CircleShape)
-                            .background(preview)
-                            .border(
-                                1.dp,
-                                MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
-                                CircleShape
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(
+                                if (selected) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent
                             )
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    Column {
-                        Text(
-                            text = stringResource(R.string.settings_custom_accent_color),
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.SemiBold
+                            .clickable { onSelect(preset.id) }
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(30.dp)
+                                .clip(CircleShape)
+                                .background(preset.palette.accent)
+                                .border(
+                                    1.dp,
+                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
+                                    CircleShape
+                                )
                         )
-                        Text(
-                            text = if (useDefault) stringResource(R.string.settings_default_scheme) else formatHex(preview),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    PalettePresets.forEach { (label, hex) ->
-                        val color = parsePaletteColor(hex) ?: Color(0xFFE0E0E0)
-                        val isSelected = if (hex == null) {
-                            currentSeed.isNullOrBlank()
-                        } else {
-                            hex == currentSeed
-                        }
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.width(52.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(color)
-                                    .border(
-                                        width = if (isSelected) 3.dp else 1.dp,
-                                        color = if (isSelected) {
-                                            MaterialTheme.colorScheme.onSurface
-                                        } else {
-                                            MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
-                                        },
-                                        shape = CircleShape
-                                    )
-                                    .clickable { pick(hex) },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (isSelected) {
-                                    Icon(
-                                        imageVector = TablerIcons.Check,
-                                        contentDescription = null,
-                                        tint = if (color.luminance() > 0.5f) {
-                                            Color(0xFF1A1A1A)
-                                        } else {
-                                            Color.White
-                                        },
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                            }
-                            Spacer(Modifier.height(4.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = stringResource(label),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (isSelected) {
-                                    MaterialTheme.colorScheme.onSurface
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                text = preset.family,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = preset.name,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        if (selected) {
+                            Icon(
+                                imageVector = TablerIcons.Check,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
                             )
                         }
                     }
                 }
-
-                HorizontalDivider()
-
-                ColorSlider(stringResource(R.string.settings_color_red), red, { red = it; useDefault = false }, Color(0xFFF44336))
-                ColorSlider(stringResource(R.string.settings_color_green), green, { green = it; useDefault = false }, Color(0xFF4CAF50))
-                ColorSlider(stringResource(R.string.settings_color_blue), blue, { blue = it; useDefault = false }, Color(0xFF2196F3))
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                onSave(if (useDefault) null else formatHex(preview))
-            }) {
-                Text(stringResource(R.string.settings_apply), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-            }
-        },
-        dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.settings_cancel), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    stringResource(R.string.settings_close),
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
             }
         }
     )
-}
-
-@Composable
-private fun ColorSlider(
-    label: String,
-    value: Float,
-    onValueChange: (Float) -> Unit,
-    color: Color
-) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.width(52.dp)
-        )
-        Slider(
-            value = value,
-            onValueChange = onValueChange,
-            valueRange = 0f..255f,
-            modifier = Modifier.weight(1f),
-            colors = SliderDefaults.colors(
-                thumbColor = color,
-                activeTrackColor = color,
-                inactiveTrackColor = color.copy(alpha = 0.2f)
-            )
-        )
-        Text(
-            text = value.roundToInt().toString(),
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.width(30.dp),
-            textAlign = TextAlign.End
-        )
-    }
 }
 
 @Composable
@@ -1743,6 +1691,75 @@ fun SingleChoiceDialog(
 }
 
 @Composable
+fun LanguageDialog(
+    current: String,
+    systemLabel: String,
+    onSelect: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(28.dp),
+        title = {
+            Text(
+                text = stringResource(R.string.settings_language),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                AppLocale.AVAILABLE.forEach { tag ->
+                    val label = AppLocale.nativeName(tag) ?: systemLabel
+                    val isSelected = current == tag
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable { onSelect(tag) },
+                        color = if (isSelected) {
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
+                        } else {
+                            Color.Transparent
+                        }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = isSelected,
+                                onClick = { onSelect(tag) },
+                                colors = RadioButtonDefaults.colors(
+                                    selectedColor = MaterialTheme.colorScheme.primary,
+                                    unselectedColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.bodyLarge.copy(
+                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                                ),
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.settings_cancel), color = MaterialTheme.colorScheme.primary)
+            }
+        }
+    )
+}
+
+@Composable
 fun CustomCssDialog(
     initialCss: String,
     onSave: (String) -> Unit,
@@ -1943,14 +1960,15 @@ fun SettingsContentPreview() {
             onLandscapeModeChange = {},
             keepScreenOn = false,
             onKeepScreenOnChange = {},
-            paletteSeed = null,
-            onPaletteSeedChange = {},
+            themePreset = ThemePresets.DEFAULT_ID,
+            onThemePresetChange = {},
             onOfflineModeChange = {},
             onSaveProfile = { _, _ -> },
             onLoadProfile = {},
             onDeleteProfile = {},
             onClearCache = {},
             onClearData = {},
+            onClearThirdParty = {},
             blockServiceWorker = true,
             onBlockServiceWorkerChange = {}
         )
@@ -1974,6 +1992,7 @@ fun LoggerDialog(onDismiss: () -> Unit) {
     LaunchedEffect(Unit) {
         while (true) {
             delay(350)
+            if (Logger.count() == entries.size) continue
             val next = Logger.entries()
             val changed = next.size != entries.size || next.lastOrNull()?.id != entries.lastOrNull()?.id
             if (changed) entries = next

@@ -6,6 +6,7 @@ import com.project.lol.innertube.models.YouTubeLocale
 import com.project.lol.innertube.models.body.*
 import com.project.lol.innertube.utils.parseCookieString
 import com.project.lol.innertube.utils.sha1
+import com.project.lol.util.Logger
 import io.ktor.client.*
 import io.ktor.client.call.body
 import io.ktor.client.engine.okhttp.*
@@ -20,6 +21,7 @@ import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import java.net.Proxy
+import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.delay
 import java.util.*
@@ -33,6 +35,8 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 @OptIn(ExperimentalEncodingApi::class)
 class InnerTube {
     private var httpClient = createClient()
+
+    private var cacheDir: File? = null
 
     var locale = YouTubeLocale(
         gl = Locale.getDefault().country,
@@ -57,6 +61,14 @@ class InnerTube {
     var proxyAuth: String? = null
 
     var useLoginForBrowse: Boolean = false
+
+    fun setCacheDir(dir: File?) {
+        if (dir == cacheDir) return
+        cacheDir = dir
+        httpClient.close()
+        httpClient = createClient()
+        Logger.d(TAG, "http cache dir set to ${dir?.absolutePath ?: "none"}")
+    }
 
     @OptIn(ExperimentalSerializationApi::class)
     private fun createClient() = HttpClient(OkHttp) {
@@ -99,12 +111,24 @@ class InnerTube {
                 retryOnConnectionFailure(true)
                 
                 // Cache configuration for better performance
-                cache(
-                    okhttp3.Cache(
-                        directory = java.io.File(System.getProperty("java.io.tmpdir"), "http_cache"),
-                        maxSize = 50L * 1024L * 1024L // 50 MB
-                    )
-                )
+                cacheDir?.let { dir ->
+                    runCatching {
+                        dir.mkdirs()
+                        cache(
+                            okhttp3.Cache(
+                                directory = dir,
+                                maxSize = 50L * 1024L * 1024L // 50 MB
+                            )
+                        )
+                    }.onFailure { error ->
+                        Logger.w(
+                            TAG,
+                            "okhttp cache unavailable at ${dir.absolutePath}: " +
+                                "${error::class.java.name}: ${error.message ?: "(no message)"}",
+                            error,
+                        )
+                    }
+                }
                 
                 // Apply proxy configuration
                 this@InnerTube.proxy?.let { proxyConfig ->
@@ -180,7 +204,15 @@ class InnerTube {
                 return block()
             } catch (e: IOException) {
                 attempt++
-                if (attempt >= maxAttempts) throw e
+                if (attempt >= maxAttempts) {
+                    Logger.w(
+                        TAG,
+                        "request failed after $attempt attempt(s): ${e::class.java.name}: ${e.message}",
+                        e,
+                    )
+                    throw e
+                }
+                Logger.w(TAG, "request retry $attempt/$maxAttempts after ${e::class.java.name}: ${e.message}")
                 delay(currentDelay)
                 currentDelay = (currentDelay * factor).toLong()
             }
@@ -255,6 +287,10 @@ class InnerTube {
         httpClient.get("https://returnyoutubedislikeapi.com/Votes?videoId=$videoId") {
             contentType(ContentType.Application.Json)
         }
+    }
+
+    companion object {
+        private const val TAG = "innertube"
     }
 
 }

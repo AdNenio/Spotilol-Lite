@@ -26,11 +26,12 @@ import androidx.media.session.MediaButtonReceiver
 import com.project.lol.R
 import com.project.lol.ui.OfflineActivity
 import com.project.lol.util.Logger
-import com.project.lol.webview.helpers.AccentTheme
+import com.project.lol.ui.theme.ThemeController
 import com.project.lol.widget.WidgetSource
 import com.project.lol.widget.WidgetState
 import com.project.lol.widget.WidgetUpdater
 import androidx.core.graphics.toColorInt
+import com.project.lol.util.AppLocale
 import java.io.File
 import kotlin.math.min
 import kotlinx.coroutines.CoroutineScope
@@ -219,12 +220,12 @@ class OfflineMediaService : Service() {
                     MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS
             )
             setCallback(object : MediaSessionCompat.Callback() {
-                override fun onPlay() {
-                    if (!isPlaying) OfflineMediaService.controller?.onPlayPause()
-                }
-
                 override fun onPlayFromSearch(query: String?, extras: Bundle?) {
                     OfflineMediaService.controller?.onPlayFromSearch(query)
+                }
+
+                override fun onPlay() {
+                    if (!isPlaying) OfflineMediaService.controller?.onPlayPause()
                 }
 
                 override fun onPause() {
@@ -261,7 +262,11 @@ class OfflineMediaService : Service() {
             addAction(ACTION_WIDGET_REFRESH)
             addAction(Intent.ACTION_MEDIA_BUTTON)
         }
-        androidx.core.content.ContextCompat.registerReceiver(this, actionReceiver, filter, androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(actionReceiver, filter, RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(actionReceiver, filter)
+        }
 
         val noisyFilter = IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -305,7 +310,7 @@ class OfflineMediaService : Service() {
     }
 
     private fun widgetAccent(): Int = runCatching {
-        AccentTheme.resolveHex(this).toColorInt()
+        ThemeController.accentHex(this).toColorInt()
     }.getOrDefault(NOTIF_COLOR)
 
     private fun pushWidgetState(force: Boolean = false) {
@@ -487,5 +492,9 @@ class OfflineMediaService : Service() {
             this, action.hashCode(), intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+    }
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(AppLocale.wrap(newBase))
     }
 }

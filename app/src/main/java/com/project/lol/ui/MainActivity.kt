@@ -99,7 +99,6 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.webkit.WebViewCompat
-import com.google.firebase.analytics.FirebaseAnalytics
 import com.project.lol.R
 import com.project.lol.offline.DownloadManager
 import com.project.lol.profile.ProfileManager
@@ -214,8 +213,6 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
 
     private lateinit var prefs: SharedPreferences
 
-    private val analytics: FirebaseAnalytics by lazy { FirebaseAnalytics.getInstance(this) }
-
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -224,12 +221,6 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
             isAppearanceLightNavigationBars = false
         }
         super.onCreate(savedInstanceState)
-
-        // Track screen view
-        analytics.logEvent(FirebaseAnalytics.Event.SCREEN_VIEW, Bundle().apply {
-            putString(FirebaseAnalytics.Param.SCREEN_NAME, "MainActivity")
-            putString(FirebaseAnalytics.Param.SCREEN_CLASS, "MainActivity")
-        })
 
         prefs = getSharedPreferences("spotilol_prefs", MODE_PRIVATE)
 
@@ -422,9 +413,6 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
                                 },
                                 navigationIcon = {
                                     IconButton(onClick = {
-                                        analytics.logEvent("open_settings", Bundle().apply {
-                                            putString(FirebaseAnalytics.Param.SCREEN_NAME, "SettingsDialog")
-                                        })
                                         settingsDialogOpen = true
                                     }) {
                                         Icon(
@@ -628,14 +616,10 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
                                     onInputChange = { sleepTimerInputText.value = it },
                                     onStartCountdown = { minutes ->
                                         showSleepTimerDialog.value = false
-                                        analytics.logEvent("sleep_timer_start", Bundle().apply {
-                                            putString("minutes", minutes.toString())
-                                        })
                                         SleepTimerManager.startCountdown(minutes)
                                     },
                                     onStartEndOfSong = {
                                         showSleepTimerDialog.value = false
-                                        analytics.logEvent("sleep_timer_end_of_song", null)
                                         SleepTimerManager.startEndOfSong()
                                     },
                                     onActionChange = { SleepTimerManager.setAction(this@MainActivity, it) },
@@ -664,7 +648,6 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
                                     BatteryOptimizationDialog(
                                         onConfirm = {
                                             showBatteryDialog.value = false
-                                            analytics.logEvent("battery_prompt_allow", null)
                                             if (!BatterySaver.requestExemption(this@MainActivity)) {
                                                 Logger.w(TAG, "battery exemption dialog unavailable, opening app details")
                                                 BatterySaver.openAppSettings(this@MainActivity)
@@ -672,7 +655,6 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
                                         },
                                         onDismiss = {
                                             showBatteryDialog.value = false
-                                            analytics.logEvent("battery_prompt_dismiss", null)
                                         }
                                     )
                                 }
@@ -726,16 +708,9 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
         serviceEnabledState.value = newValue
         prefs.edit().putBoolean("ServiceOn", newValue).apply()
         if (!newValue) {
-            analytics.logEvent("service_toggle", Bundle().apply {
-                putString("enabled", "off")
-            })
             stopService(Intent(this, MediaNotificationService::class.java))
             serviceStarted = false
             destroyWebView()
-        } else {
-            analytics.logEvent("service_toggle", Bundle().apply {
-                putString("enabled", "on")
-            })
         }
     }
 
@@ -1383,11 +1358,6 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
         super.onResume()
         Logger.i(TAG, "activity resumed: restoring webview loops")
         WebViewHost.attach(this)
-
-        analytics.logEvent(FirebaseAnalytics.Event.SCREEN_VIEW, Bundle().apply {
-            putString(FirebaseAnalytics.Param.SCREEN_NAME, "MainActivity")
-            putString(FirebaseAnalytics.Param.SCREEN_CLASS, "MainActivity")
-        })
 
         prefs = getSharedPreferences("spotilol_prefs", MODE_PRIVATE)
         serviceEnabledState.value = prefs.getBoolean("ServiceOn", true)

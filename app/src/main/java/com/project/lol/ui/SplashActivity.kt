@@ -59,19 +59,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
-import com.google.firebase.analytics.FirebaseAnalytics
-import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.project.lol.BuildConfig
 import com.project.lol.R
 import com.project.lol.ui.theme.SpotifyTheme
 import com.project.lol.util.BuildInfo
-import com.project.lol.util.Telemetry
 import compose.icons.TablerIcons
 import compose.icons.tablericons.Bell
 import compose.icons.tablericons.Bluetooth
-import androidx.lifecycle.lifecycleScope
 import com.project.lol.util.AppLocale
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -105,18 +100,6 @@ class SplashActivity : ComponentActivity() {
             ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         } else {
             ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-        }
-
-        FirebaseCrashlytics.getInstance()
-        if (Telemetry.isEnabled(this)) {
-            lifecycleScope.launch(Dispatchers.Default) {
-                Telemetry.apply(this@SplashActivity, true)
-                FirebaseAnalytics.getInstance(this@SplashActivity)
-                    .logEvent(FirebaseAnalytics.Event.APP_OPEN, Bundle().apply {
-                        putString(FirebaseAnalytics.Param.SCREEN_NAME, "Spotilol")
-                        putString(FirebaseAnalytics.Param.SCREEN_CLASS, "SplashActivity")
-                    })
-            }
         }
 
         setContent {

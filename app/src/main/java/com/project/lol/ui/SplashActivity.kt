@@ -140,12 +140,6 @@ class SplashActivity : ComponentActivity() {
             }
 
             LaunchedEffect(Unit) {
-                if (prefs.getBoolean("OfflineMode", false)) {
-                    startActivity(Intent(this@SplashActivity, OfflineActivity::class.java))
-                    fadeTransition()
-                    finish()
-                    return@LaunchedEffect
-                }
                 intro = false
                 if (prefs.getBoolean("OnboardingDone", false)) {
                     preparing = true

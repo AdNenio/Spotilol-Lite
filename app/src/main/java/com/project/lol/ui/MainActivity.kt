@@ -100,7 +100,6 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.webkit.WebViewCompat
 import com.project.lol.R
-import com.project.lol.offline.DownloadManager
 import com.project.lol.profile.ProfileManager
 import com.project.lol.service.MediaNotificationService
 import com.project.lol.timer.AppQuit
@@ -123,7 +122,6 @@ import com.project.lol.webview.helpers.DevLogPrelude
 import com.project.lol.webview.helpers.buildAmoledJs
 import com.project.lol.webview.helpers.buildCustomCssJs
 import com.project.lol.webview.injections.LogoutCheck
-import com.project.lol.widget.WidgetActions
 import compose.icons.TablerIcons
 import compose.icons.tablericons.Menu2
 import compose.icons.tablericons.Settings
@@ -372,7 +370,6 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
                         themeSecondaryState.value = color
                         ThemeController.updateSecondary(color)
                     },
-                    onOfflineModeChange = { switchOfflineMode(it) },
                     onSaveProfile = { name, cookies -> saveProfile(name, cookies) },
                     onLoadProfile = { cookies -> loadProfile(cookies) },
                     onDeleteProfile = { name -> deleteProfile(name) },
@@ -524,18 +521,6 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
 
                             bridge.onMediaStatus = { json ->
                                 handleMediaStatus(json)
-                            }
-
-                            bridge.onDownloadTrack = { payload ->
-                                wireDownloadCallbacks()
-                                startDownloadService()
-                                DownloadManager.downloadCurrentTrack(this@MainActivity, payload)
-                            }
-
-                            bridge.onDownloadCollection = { payload ->
-                                wireDownloadCallbacks()
-                                startDownloadService()
-                                DownloadManager.downloadCollection(this@MainActivity, payload)
                             }
 
                             key(webViewGeneration.intValue) {
@@ -712,19 +697,6 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
             serviceStarted = false
             destroyWebView()
         }
-    }
-
-    private fun switchOfflineMode(enabled: Boolean) {
-        Logger.i(TAG, "offline mode -> $enabled, restarting app")
-        SleepTimerManager.cancel()
-        prefs.edit().putBoolean("OfflineMode", enabled).apply()
-        WidgetActions.setOfflineMode(this, enabled)
-        stopService(Intent(this, MediaNotificationService::class.java))
-        val intent = Intent(this, SplashActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-        }
-        startActivity(intent)
-        finish()
     }
 
     private fun saveProfile(name: String, cookies: String) {
@@ -1239,33 +1211,6 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
                 try { conn?.disconnect() } catch (_: Exception) {}
             }
         }.start()
-    }
-
-    private fun wireDownloadCallbacks() {
-        DownloadManager.onStatus = { msg ->
-            runOnUiThread {
-                Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
-            }
-        }
-        DownloadManager.onProgress = { pct, label ->
-            runOnUiThread {
-                val safe = label.replace("\\", "\\\\").replace("'", "\\'").replace("\n", " ")
-                val batch = DownloadManager.isBatchActive()
-                webView?.evaluateJavascript(
-                    "window.__splDlBatch=$batch;window.splDownloadProgress($pct, '$safe')",
-                    null
-                )
-            }
-        }
-    }
-
-    private fun startDownloadService() {
-        Logger.d(TAG, "starting download service")
-        runCatching {
-            ContextCompat.startForegroundService(
-                this, Intent(this, com.project.lol.service.DownloadService::class.java)
-            )
-        }
     }
 
     private fun destroyWebView() {

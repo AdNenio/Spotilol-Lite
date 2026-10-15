@@ -6,14 +6,10 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
-    <uses-permission
-        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        android:maxSdkVersion="28" />
 
     <application
         android:name=".SpotilolApp"
@@ -78,15 +74,6 @@
         </activity>
 
         <activity
-            android:name=".ui.OfflineActivity"
-            android:exported="false"
-            android:launchMode="singleTop"
-            android:screenOrientation="fullSensor"
-            android:supportsPictureInPicture="true"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
-            android:theme="@style/Theme.Spotilol" />
-
-        <activity
             android:name=".ui.CrashActivity"
             android:exported="false"
             android:launchMode="singleTask"
@@ -94,19 +81,6 @@
             android:screenOrientation="fullSensor"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:theme="@style/Theme.Spotilol" />
-
-        <activity
-            android:name=".widget.WidgetStudioActivity"
-            android:exported="true"
-            android:excludeFromRecents="true"
-            android:launchMode="singleTop"
-            android:screenOrientation="fullSensor"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
-            android:theme="@style/Theme.Spotilol">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
-            </intent-filter>
-        </activity>
 
         <service
             android:name=".service.MediaNotificationService"
@@ -118,48 +92,12 @@
             </intent-filter>
         </service>
 
-        <service
-            android:name=".service.OfflineMediaService"
-            android:exported="false"
-            android:foregroundServiceType="mediaPlayback"
-            tools:targetApi="28" />
-
-        <service
-            android:name=".service.DownloadService"
-            android:exported="false"
-            android:foregroundServiceType="dataSync"
-            tools:targetApi="34" />
-
         <receiver
             android:name="androidx.media.session.MediaButtonReceiver"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
-        </receiver>
-
-        <receiver
-            android:name=".widget.SpotilolPlayerWidgetReceiver"
-            android:exported="true"
-            android:label="@string/widget_player_name">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/widget_player_info" />
-        </receiver>
-
-        <receiver
-            android:name=".widget.SpotilolArtWidgetReceiver"
-            android:exported="true"
-            android:label="@string/widget_art_name">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/widget_art_info" />
         </receiver>
 
     </application>

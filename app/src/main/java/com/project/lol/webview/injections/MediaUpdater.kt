@@ -28,24 +28,6 @@ object MediaUpdater {
                 return cur;
             };
 
-            window.splWidgetMeta = function(id){
-                try{
-                    var w = document.querySelector('[data-testid="now-playing-widget"]');
-                    if(!w) return null;
-                    var a = w.querySelector('a[href*="/track/"]');
-                    var m = a ? ((a.getAttribute('href')||'').match(/\/track\/([a-zA-Z0-9]{22})/)) : null;
-                    if(!m || m[1] !== id) return null;
-                    var out = {};
-                    var t = (a.textContent||'').trim();
-                    if(t) out.name = t;
-                    var al = w.querySelector('a[data-testid="context-item-info-artist"]');
-                    if(al){ var s = (al.textContent||'').trim(); if(s) out.artist = s; }
-                    var im = w.querySelector('img[data-testid="cover-art-image"]');
-                    if(im && im.src) out.cover = window.splUpCoverUrl(im.src);
-                    return out;
-                }catch(e){ return null; }
-            };
-
             window.splRowMeta = function(id){
                 try{
                     var onAlbumPage = location.pathname.indexOf('/album/') !== -1;
@@ -113,8 +95,6 @@ object MediaUpdater {
 
                 var attempt = function(n, resolve){
                     try{
-                        var wm = window.splWidgetMeta(id);
-                        if(wm) window.splMergeTrackMeta(id, wm);
                         var rm = window.splRowMeta(id);
                         if(rm) window.splMergeTrackMeta(id, rm);
                     }catch(e){}

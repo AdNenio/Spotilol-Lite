@@ -7,9 +7,7 @@ import android.os.CountDownTimer
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import com.project.lol.service.DownloadService
 import com.project.lol.service.MediaNotificationService
-import com.project.lol.service.OfflineMediaService
 import com.project.lol.util.Logger
 import kotlin.system.exitProcess
 import androidx.core.content.edit
@@ -251,8 +249,6 @@ object AppQuit {
         val app = context.applicationContext
         Logger.i(TAG, "quitting app")
         runCatching { app.stopService(Intent(app, MediaNotificationService::class.java)) }
-        runCatching { app.stopService(Intent(app, OfflineMediaService::class.java)) }
-        runCatching { app.stopService(Intent(app, DownloadService::class.java)) }
         (context as? Activity)?.let { runCatching { it.finishAndRemoveTask() } }
         mainHandler.postDelayed({
             runCatching { exitProcess(0) }

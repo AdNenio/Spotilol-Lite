@@ -16,7 +16,6 @@ import java.lang.ref.WeakReference
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
-import com.project.lol.offline.DownloadManager
 import com.project.lol.spicy.SpicyLyricsClient
 import com.project.lol.util.Logger
 import com.project.lol.webview.helpers.NavToken
@@ -58,8 +57,6 @@ class SpotifyBridge(activityRef: WeakReference<Activity>) {
     var onEnterVideoFullscreen: (() -> Unit)? = null
     var onExitVideoFullscreen: (() -> Unit)? = null
     var onEnterLyricsPipRequest: (() -> Unit)? = null
-    var onDownloadTrack: ((String) -> Unit)? = null
-    var onDownloadCollection: ((String) -> Unit)? = null
     var onPlayerExpanded: ((Boolean) -> Unit)? = null
     var onWideVideo: ((Boolean) -> Unit)? = null
     var onCtxMenuState: ((Boolean) -> Unit)? = null
@@ -295,33 +292,6 @@ class SpotifyBridge(activityRef: WeakReference<Activity>) {
         activity.runOnUiThread {
             onEnterLyricsPipRequest?.invoke()
         }
-    }
-
-    @JavascriptInterface
-    fun downloadTrack(json: String?) {
-        Logger.i(CALL, "downloadTrack (${json?.length ?: 0} chars)")
-        json?.let { onDownloadTrack?.invoke(it) }
-    }
-
-    @Suppress("unused")
-    @JavascriptInterface
-    fun downloadCollection(json: String?) {
-        Logger.i(CALL, "downloadCollection (${json?.length ?: 0} chars)")
-        json?.let { onDownloadCollection?.invoke(it) }
-    }
-
-    @Suppress("unused")
-    @JavascriptInterface
-    fun skipDownload() {
-        Logger.i(CALL, "skipDownload")
-        DownloadManager.skipCurrent()
-    }
-
-    @Suppress("unused")
-    @JavascriptInterface
-    fun cancelDownload() {
-        Logger.i(CALL, "cancelDownload")
-        DownloadManager.cancelAll()
     }
 
     @Suppress("unused")

@@ -48,9 +48,6 @@ import androidx.core.graphics.toColorInt
 import com.project.lol.util.AppLocale
 import com.project.lol.ui.theme.ThemeController
 import com.project.lol.util.Logger
-import com.project.lol.widget.WidgetSource
-import com.project.lol.widget.WidgetState
-import com.project.lol.widget.WidgetUpdater
 import java.lang.ref.WeakReference
 import java.net.HttpURLConnection
 import java.net.URL
@@ -79,7 +76,6 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
         const val ACTION_SHUFFLE = "com.project.lol.ACTION_SHUFFLE"
         const val ACTION_REPEAT = "com.project.lol.ACTION_REPEAT"
         const val ACTION_FAVORITE = "com.project.lol.ACTION_FAVORITE"
-        const val ACTION_WIDGET_REFRESH = "com.project.lol.ACTION_WIDGET_REFRESH"
 
         private const val CUSTOM_ACTION_TOGGLE_FAV = "toggle_fav"
         private const val CUSTOM_ACTION_TOGGLE_SHUFFLE = "toggle_shuffle"
@@ -232,8 +228,6 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
     private var lastActiveContextId: String? = null
     private var isRepeat = "false"
     private var wakeLock: PowerManager.WakeLock? = null
-    private val widgetScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private var lastWidgetPushAt = 0L
 
     private val actionReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -246,7 +240,6 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
                 ACTION_SHUFFLE -> webView?.evaluateJavascript("actToggleShuffle()", null)
                 ACTION_REPEAT -> webView?.evaluateJavascript("actRepeat()", null)
                 ACTION_FAVORITE -> webView?.evaluateJavascript("actAddToFav()", null)
-                ACTION_WIDGET_REFRESH -> pushWidgetState(force = true)
             }
         }
     }
@@ -608,8 +601,6 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
             getSystemService(NotificationManager::class.java)
                 .cancel(NOTIFICATION_ID)
         } catch (_: Exception) {}
-        val ctx = applicationContext
-        widgetScope.launch { runCatching { WidgetUpdater.push(ctx, WidgetState()) } }
         super.onDestroy()
     }
 
@@ -706,7 +697,6 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
             addAction(ACTION_SHUFFLE)
             addAction(ACTION_REPEAT)
             addAction(ACTION_FAVORITE)
-            addAction(ACTION_WIDGET_REFRESH)
             addAction(Intent.ACTION_MEDIA_BUTTON)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -836,7 +826,6 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
             updatePlaybackState()
             updateMetadata()
             showNotification()
-            pushWidgetState(force = true)
         } catch (_: Exception) {}
     }
 
@@ -844,33 +833,6 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
         currentPosition = position
         if (isPlaying) acquireWakeLock()
         updatePlaybackState()
-        pushWidgetState()
-    }
-
-    private fun pushWidgetState(force: Boolean = false) {
-        val now = System.currentTimeMillis()
-        if (!force && now - lastWidgetPushAt < 2000L) return
-        if (!isPlaying && WidgetSource.get(this) == WidgetState.SOURCE_OFFLINE) return
-        lastWidgetPushAt = now
-        val state = WidgetState(
-            title = currentTitle,
-            artist = currentArtist,
-            playing = isPlaying,
-            favorite = isFavorite,
-            shuffle = when {
-                !isShuffleAvailable -> "disabled"
-                isSmartShuffle -> "smart"
-                isShuffle -> "shuffle"
-                else -> "off"
-            },
-            repeat = isRepeat,
-            position = currentPosition,
-            duration = currentDuration,
-            source = WidgetState.SOURCE_WEB,
-            cover = coverBitmap
-        )
-        val ctx = applicationContext
-        widgetScope.launch { runCatching { WidgetUpdater.push(ctx, state) } }
     }
 
     private fun updatePlaybackState() {
@@ -958,7 +920,6 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
                     coverBitmap = scaled
                     updateMetadata()
                     showNotification()
-                    pushWidgetState(force = true)
                 }
             } catch (_: Exception) {}
         }.start()

@@ -27,5 +27,3 @@ dependencyResolutionManagement {
 
 rootProject.name = "Spotilol"
 include(":app")
-include(":lame")
-include(":opus")

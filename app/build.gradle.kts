@@ -3,7 +3,6 @@ import java.util.Properties
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
-    id("org.jetbrains.kotlin.plugin.serialization")
 }
 
 val keystorePropertiesFile = rootProject.file("keystore/keystore.properties")
@@ -67,8 +66,6 @@ dependencies {
     implementation(libs.material)
     implementation(libs.androidx.webkit)
     implementation(libs.androidx.media)
-    implementation(libs.bouncyprov)
-    implementation(libs.bouncypkix)
     implementation(libs.security.crypto)
 
     // Jetpack Compose
@@ -83,27 +80,6 @@ dependencies {
     implementation(libs.lifecycle.runtime.compose)
     debugImplementation(libs.compose.ui.tooling)
 
-    // Glance (home screen widgets)
-    implementation(libs.glance.appwidget)
-    implementation(libs.glance.material3)
-
-    // Ktor + serialization (YouTube InnerTube client)
-    implementation(libs.ktor.client.core)
-    implementation(libs.ktor.client.okhttp)
-    implementation(libs.ktor.client.content.negotiation)
-    implementation(libs.ktor.client.encoding)
-    implementation(libs.ktor.serialization.json)
-    implementation(libs.serialization.json)
-
-    // NewPipe + YouTube streaming
-    implementation(libs.newpipeextractor)
-    implementation(libs.brotli)
-    implementation(libs.okhttp)
-
-    // Audio downloads: opus decoding, mp3 encoding
-    implementation(project(":lame"))
-    implementation(project(":opus"))
-
-    // Core library desugaring (required by NewPipeExtractor)
+    // Core library desugaring (java.time in Logger)
     coreLibraryDesugaring(libs.desugaring)
 }

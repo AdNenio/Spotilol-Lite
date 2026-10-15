@@ -104,14 +104,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.webkit.WebViewCompat
 import com.project.lol.R
-import com.project.lol.innertube.YouTube
-import com.project.lol.offline.DownloadFolder
-import com.project.lol.offline.DownloadFormat
-import com.project.lol.offline.DownloadPrefs
-import com.project.lol.offline.lyrics.LyricsSource
 import com.project.lol.profile.ProfileManager
 import com.project.lol.service.MediaNotificationService
-import com.project.lol.service.OfflineMediaService
 import com.project.lol.ui.SplashActivity
 import com.project.lol.ui.components.ChangelogDialog
 import com.project.lol.ui.lyrics.CustomLyricsPresets
@@ -129,7 +123,6 @@ import com.project.lol.util.AppLocale
 import com.project.lol.util.BatterySaver
 import com.project.lol.util.BuildInfo
 import com.project.lol.util.DeviceInfo
-import com.project.lol.util.InnertubeCachePrefs
 import com.project.lol.util.LogEntry
 import com.project.lol.util.LogExport
 import com.project.lol.util.LogFilter
@@ -138,7 +131,6 @@ import com.project.lol.util.Logger
 import com.project.lol.util.Logger.isAutoScroll
 import com.project.lol.webview.helpers.LyricsStyle
 import com.project.lol.webview.helpers.LyricsTheme
-import com.project.lol.widget.WidgetStudioActivity
 import compose.icons.TablerIcons
 import compose.icons.tablericons.ArrowDown
 import compose.icons.tablericons.ArrowsMinimize
@@ -165,7 +157,6 @@ import compose.icons.tablericons.EyeOff
 import compose.icons.tablericons.FileDownload
 import compose.icons.tablericons.FileUpload
 import compose.icons.tablericons.Flask
-import compose.icons.tablericons.Folder
 import compose.icons.tablericons.InfoCircle
 import compose.icons.tablericons.Language
 import compose.icons.tablericons.Link
@@ -231,7 +222,6 @@ fun SettingsContent(
     onThemePresetChange: (String) -> Unit,
     themeSecondary: Color?,
     onThemeSecondaryChange: (Color?) -> Unit,
-    onOfflineModeChange: (Boolean) -> Unit,
     onSaveProfile: (String, String) -> Unit,
     onLoadProfile: (String) -> Unit,
     onDeleteProfile: (String) -> Unit,
@@ -255,7 +245,6 @@ fun SettingsContent(
     var btAutoResume by remember { mutableStateOf(prefs.getBoolean("BtAutoResume", false)) }
     var hpAutoResume by remember { mutableStateOf(prefs.getBoolean("HpAutoResume", false)) }
     var playerMode by remember { mutableStateOf(prefs.getString("PlayerMode", "spotilol") ?: "spotilol") }
-    var offlineMode by remember { mutableStateOf(prefs.getBoolean("OfflineMode", false)) }
     var blockSW by remember { mutableStateOf(blockServiceWorker) }
     var hideEmptyPlayer by remember { mutableStateOf(prefs.getBoolean("HideEmptyPlayer", false)) }
     var webCanvas by remember { mutableStateOf(prefs.getBoolean("WebCanvas", true)) }
@@ -295,66 +284,12 @@ fun SettingsContent(
     var debugUnlocked by remember { mutableStateOf(prefs.getBoolean("DebugUnlocked", false)) }
     var debugTapCount by remember { mutableStateOf(0) }
     var showLyricsStyleDialog by remember { mutableStateOf(false) }
-    var showFormatDialog by remember { mutableStateOf(false) }
-    var showFolderDialog by remember { mutableStateOf(false) }
-    var dlFormat by remember {
-        mutableStateOf(DownloadPrefs.format(context))
-    }
-    var dlFolderPath by remember {
-        mutableStateOf(DownloadPrefs.folderDisplayPath(context))
-    }
-    var dlFolderLabel by remember {
-        mutableStateOf(DownloadPrefs.folderLabel(context))
-    }
-    fun refreshFolderState() {
-        dlFolderPath = DownloadPrefs.folderDisplayPath(context)
-        dlFolderLabel = DownloadPrefs.folderLabel(context)
-    }
-    fun applyInnertubeCacheLimit() {
-        val bytes = InnertubeCachePrefs.maxBytes(context)
-        val applied = runCatching { YouTube.setCacheLimit(bytes) }.isSuccess
-        Toast.makeText(context,
-            resources.getString(
-                if (applied) R.string.settings_innertube_cache_applied
-                else R.string.settings_innertube_cache_restart_hint
-            ),
-            Toast.LENGTH_SHORT
-        ).show()
-    }
     fun applyLanguageRestart() {
         runCatching { context.stopService(Intent(context, MediaNotificationService::class.java)) }
-        runCatching { context.stopService(Intent(context, OfflineMediaService::class.java)) }
         val intent = Intent(context, SplashActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         }
         runCatching { context.startActivity(intent) }
-    }
-    val folderPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocumentTree()
-    ) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        if (DownloadFolder.persist(context, uri)) {
-            DownloadPrefs.setFolder(context, uri)
-            refreshFolderState()
-        } else {
-            Toast.makeText(context, resources.getString(R.string.settings_folder_access_error), Toast.LENGTH_SHORT).show()
-        }
-    }
-    var dlTags by remember { mutableStateOf(DownloadPrefs.writeTags(context)) }
-    var dlLyrics by remember { mutableStateOf(DownloadPrefs.lyrics(context)) }
-    var dlLyricsSource by remember { mutableStateOf(DownloadPrefs.lyricsSource(context)) }
-    var dlLyricsEmbed by remember { mutableStateOf(DownloadPrefs.lyricsEmbed(context)) }
-    var dlLyricsSidecar by remember { mutableStateOf(DownloadPrefs.lyricsSidecar(context)) }
-    var showLyricsSourceDialog by remember { mutableStateOf(false) }
-
-    var innertubeCacheMb by remember { mutableStateOf(InnertubeCachePrefs.mb(context)) }
-    var innertubeCacheUsed by remember { mutableStateOf(0L) }
-    var showInnertubeCacheDialog by remember { mutableStateOf(false) }
-
-    LaunchedEffect(innertubeCacheMb) {
-        innertubeCacheUsed = withContext(Dispatchers.IO) {
-            InnertubeCachePrefs.usedBytes(context)
-        }
     }
 
     fun onDebugSecretTap() {
@@ -535,23 +470,6 @@ fun SettingsContent(
                         onCheckedChange = { enabled ->
                             onHideTopBarChange(enabled)
                             prefs.edit().putBoolean("HideTopBar", enabled).apply()
-                        }
-                    )
-
-                    HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-
-                    val widgetStudioContext = LocalContext.current
-                    SettingTile(
-                        title = stringResource(R.string.settings_widget_studio),
-                        subtitle = stringResource(R.string.settings_widget_studio_subtitle),
-                        icon = TablerIcons.Devices,
-                        onClick = {
-                            runCatching {
-                                widgetStudioContext.startActivity(
-                                    Intent(widgetStudioContext, WidgetStudioActivity::class.java)
-                                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                )
-                            }
                         }
                     )
 
@@ -808,23 +726,6 @@ fun SettingsContent(
                     icon = TablerIcons.CloudOff
                 ) {
                     SettingSwitchTile(
-                        title = stringResource(R.string.settings_offline_mode),
-                        subtitle = if (offlineMode) {
-                            stringResource(R.string.settings_offline_on_subtitle)
-                        } else {
-                            stringResource(R.string.settings_offline_off_subtitle)
-                        },
-                        icon = TablerIcons.CloudOff,
-                        checked = offlineMode,
-                        onCheckedChange = { enabled ->
-                            offlineMode = enabled
-                            onOfflineModeChange(enabled)
-                        }
-                    )
-
-                    HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-
-                    SettingSwitchTile(
                         title = stringResource(R.string.settings_block_service_worker),
                         subtitle = stringResource(R.string.settings_block_service_worker_subtitle),
                         icon = TablerIcons.Shield,
@@ -833,112 +734,6 @@ fun SettingsContent(
                             blockSW = enabled
                             onBlockServiceWorkerChange(enabled)
                         }
-                    )
-                }
-
-                SettingSectionCard(
-                    title = stringResource(R.string.settings_section_downloads),
-                    icon = TablerIcons.Download
-                ) {
-                    SettingTile(
-                        title = stringResource(R.string.settings_audio_format),
-                        subtitle = if (dlFormat == DownloadFormat.MP3) stringResource(R.string.settings_format_mp3) else stringResource(R.string.settings_format_m4a),
-                        icon = TablerIcons.WaveSine,
-                        onClick = { showFormatDialog = true }
-                    )
-
-                    HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-
-                    SettingTile(
-                        title = stringResource(R.string.settings_download_folder),
-                        subtitle = stringResource(R.string.settings_download_folder_subtitle, dlFolderLabel),
-                        icon = TablerIcons.Folder,
-                        onClick = { showFolderDialog = true }
-                    )
-
-                    HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-
-                    SettingSwitchTile(
-                        title = stringResource(R.string.settings_write_tags),
-                        subtitle = stringResource(R.string.settings_write_tags_subtitle),
-                        icon = TablerIcons.Playlist,
-                        checked = dlTags,
-                        onCheckedChange = { enabled ->
-                            dlTags = enabled
-                            DownloadPrefs.setWriteTags(context, enabled)
-                        }
-                    )
-
-                    HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-
-                    SettingSwitchTile(
-                        title = stringResource(R.string.settings_dl_lyrics),
-                        subtitle = stringResource(R.string.settings_dl_lyrics_subtitle),
-                        icon = TablerIcons.Microphone,
-                        checked = dlLyrics,
-                        onCheckedChange = { enabled ->
-                            dlLyrics = enabled
-                            DownloadPrefs.setLyrics(context, enabled)
-                        }
-                    )
-
-                    if (dlLyrics) {
-                        HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-
-                        SettingTile(
-                            title = stringResource(R.string.settings_dl_lyrics_source),
-                            subtitle = stringResource(
-                                when (dlLyricsSource) {
-                                    LyricsSource.YOUTUBE -> R.string.settings_dl_lyrics_source_youtube
-                                    LyricsSource.SPOTIFY -> R.string.settings_dl_lyrics_source_spotify
-                                    LyricsSource.AUTO -> R.string.settings_dl_lyrics_source_auto
-                                }
-                            ),
-                            icon = TablerIcons.Music,
-                            onClick = { showLyricsSourceDialog = true }
-                        )
-
-                        HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-
-                        SettingSwitchTile(
-                            title = stringResource(R.string.settings_dl_lyrics_embed),
-                            subtitle = stringResource(R.string.settings_dl_lyrics_embed_subtitle),
-                            icon = TablerIcons.Playlist,
-                            checked = dlLyricsEmbed,
-                            onCheckedChange = { enabled ->
-                                dlLyricsEmbed = enabled
-                                DownloadPrefs.setLyricsEmbed(context, enabled)
-                            }
-                        )
-
-                        HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-
-                        SettingSwitchTile(
-                            title = stringResource(R.string.settings_dl_lyrics_sidecar),
-                            subtitle = stringResource(R.string.settings_dl_lyrics_sidecar_subtitle),
-                            icon = TablerIcons.Folder,
-                            checked = dlLyricsSidecar,
-                            onCheckedChange = { enabled ->
-                                dlLyricsSidecar = enabled
-                                DownloadPrefs.setLyricsSidecar(context, enabled)
-                            }
-                        )
-                    }
-
-                    val innertubeCacheLimitLabel = if (innertubeCacheMb == InnertubeCachePrefs.UNLIMITED) {
-                        stringResource(R.string.settings_innertube_cache_unlimited)
-                    } else {
-                        stringResource(R.string.settings_innertube_cache_mb, innertubeCacheMb)
-                    }
-                    SettingTile(
-                        title = stringResource(R.string.settings_innertube_cache),
-                        subtitle = stringResource(
-                            R.string.settings_innertube_cache_subtitle,
-                            innertubeCacheLimitLabel,
-                            InnertubeCachePrefs.formatBytes(innertubeCacheUsed)
-                        ),
-                        icon = TablerIcons.Database,
-                        onClick = { showInnertubeCacheDialog = true }
                     )
                 }
 
@@ -1372,81 +1167,6 @@ fun SettingsContent(
                 prefs.edit().putBoolean("LyricsAnimate", value).apply()
             },
             onDismiss = { showLyricsStyleDialog = false }
-        )
-    }
-
-    if (showFormatDialog) {
-        SingleChoiceDialog(
-            title = stringResource(R.string.settings_audio_format),
-            options = listOf(
-                DownloadFormat.M4A.name to stringResource(R.string.settings_format_m4a),
-                DownloadFormat.MP3.name to stringResource(R.string.settings_format_mp3)
-            ),
-            selected = dlFormat.name,
-            onSelect = { value ->
-                val f = DownloadFormat.from(value)
-                dlFormat = f
-                DownloadPrefs.setFormat(context, f)
-            },
-            onDismiss = { showFormatDialog = false }
-        )
-    }
-
-    if (showLyricsSourceDialog) {
-        SingleChoiceDialog(
-            title = stringResource(R.string.settings_dl_lyrics_source),
-            options = listOf(
-                LyricsSource.AUTO.id to stringResource(R.string.settings_dl_lyrics_source_auto),
-                LyricsSource.YOUTUBE.id to stringResource(R.string.settings_dl_lyrics_source_youtube),
-                LyricsSource.SPOTIFY.id to stringResource(R.string.settings_dl_lyrics_source_spotify),
-            ),
-            selected = dlLyricsSource.id,
-            onSelect = { value ->
-                val source = LyricsSource.from(value)
-                dlLyricsSource = source
-                DownloadPrefs.setLyricsSource(context, source)
-            },
-            onDismiss = { showLyricsSourceDialog = false }
-        )
-    }
-
-    if (showInnertubeCacheDialog) {
-        SingleChoiceDialog(
-            title = stringResource(R.string.settings_innertube_cache),
-            options = InnertubeCachePrefs.OPTIONS_MB.map { mb ->
-                mb.toString() to if (mb == InnertubeCachePrefs.UNLIMITED) {
-                    stringResource(R.string.settings_innertube_cache_unlimited)
-                } else {
-                    stringResource(R.string.settings_innertube_cache_mb, mb)
-                }
-            },
-            selected = innertubeCacheMb.toString(),
-            onSelect = { value ->
-                val mb = value.toIntOrNull() ?: InnertubeCachePrefs.DEFAULT_MB
-                if (mb != innertubeCacheMb) {
-                    innertubeCacheMb = mb
-                    InnertubeCachePrefs.setMb(context, mb)
-                    applyInnertubeCacheLimit()
-                }
-            },
-            onDismiss = { showInnertubeCacheDialog = false }
-        )
-    }
-
-    if (showFolderDialog) {
-        DownloadFolderDialog(
-            currentPath = dlFolderPath,
-            onPick = {
-                showFolderDialog = false
-                val tree = DownloadPrefs.folder(context)
-                folderPicker.launch(tree?.let { DownloadFolder.documentUri(it) })
-            },
-            onUseDefault = {
-                DownloadPrefs.setFolder(context, null)
-                refreshFolderState()
-                showFolderDialog = false
-            },
-            onDismiss = { showFolderDialog = false }
         )
     }
 
@@ -3156,72 +2876,6 @@ fun CustomCssDialog(
 }
 
 @Composable
-fun DownloadFolderDialog(
-    currentPath: String,
-    onPick: () -> Unit,
-    onUseDefault: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(28.dp),
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = TablerIcons.Folder,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    text = stringResource(R.string.settings_download_folder),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        },
-        text = {
-            Column {
-                Text(
-                    text = currentPath,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = stringResource(R.string.settings_download_folder_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 6.dp)
-                )
-                Text(
-                    text = stringResource(R.string.settings_download_folder_default, DownloadPrefs.DEFAULT_SUBFOLDER),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onUseDefault() }
-                        .padding(top = 14.dp)
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onPick) {
-                Text(
-                    stringResource(R.string.settings_choose_folder),
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.settings_cancel), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-    )
-}
-
-@Composable
 fun ConfirmationDialog(
     title: String,
     message: String,
@@ -3288,7 +2942,6 @@ fun SettingsContentPreview() {
             onThemePresetChange = {},
             themeSecondary = null,
             onThemeSecondaryChange = {},
-            onOfflineModeChange = {},
             onSaveProfile = { _, _ -> },
             onLoadProfile = {},
             onDeleteProfile = {},

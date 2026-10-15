@@ -9,7 +9,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
-import com.project.lol.widget.WidgetActions
 import java.util.Locale
 
 object ThemeController {
@@ -50,13 +49,11 @@ object ThemeController {
     fun updatePreset(id: String) {
         presetId = if (ThemePresets.byId.containsKey(id)) id else ThemePresets.DEFAULT_ID
         save()
-        refreshWidgets()
     }
 
     fun updateSecondary(color: Color?) {
         secondary = color
         save()
-        refreshWidgets()
     }
 
     fun importThemes(themes: List<ThemePreset>): List<ThemePreset> = themes.map { CustomThemes.add(it) }
@@ -69,13 +66,11 @@ object ThemeController {
     fun updateDynamicColor(value: Boolean) {
         dynamicColor = value
         save()
-        refreshWidgets()
     }
 
     fun updateAmoled(value: Boolean) {
         amoled = value
         save()
-        refreshWidgets()
     }
 
     fun resolvePalette(): ThemePalette = ThemePresets.resolve(presetId).harmonized(secondary)
@@ -115,9 +110,5 @@ object ThemeController {
             ?.putBoolean(KEY_AMOLED, amoled)
             ?.putString(KEY_SECONDARY, secondary?.let { ThemeHarmony.toHex(it) })
             ?.apply()
-    }
-
-    private fun refreshWidgets() {
-        appContext?.let { WidgetActions.refreshAll(it) }
     }
 }

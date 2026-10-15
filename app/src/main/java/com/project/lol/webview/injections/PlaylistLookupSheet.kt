@@ -85,10 +85,9 @@ object PlaylistLookupSheet {
                 var id = (typeof window.splPlayingTrackId === 'function') ? window.splPlayingTrackId() : (window.__curTrackId || null);
                 if (!id) return null;
                 var m = (window.__splTrackMeta && window.__splTrackMeta[id]) || {};
-                var w = (typeof window.splWidgetMeta === 'function') ? window.splWidgetMeta(id) : null;
-                var title = m.name || (w && w.name) || window.__curTrackName || '';
-                var artist = m.artist || (w && w.artist) || window.__curTrackArtist || '';
-                var cover = m.cover || (w && w.cover) || window.__curTrackCover || '';
+                var title = m.name || window.__curTrackName || '';
+                var artist = m.artist || window.__curTrackArtist || '';
+                var cover = m.cover || window.__curTrackCover || '';
                 if (!title) { var t = document.querySelector('a[data-testid=context-item-link]'); if (t) title = (t.textContent || '').trim(); }
                 if (!artist) { var a = document.querySelector('a[data-testid=context-item-info-artist]'); if (a) artist = (a.textContent || '').trim(); }
                 if (!cover) { var im = document.querySelector('img[data-testid=cover-art-image]'); if (im) cover = im.src; }

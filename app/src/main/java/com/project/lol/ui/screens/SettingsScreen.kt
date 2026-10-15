@@ -178,7 +178,6 @@ import compose.icons.tablericons.TrashOff
 import compose.icons.tablericons.User
 import compose.icons.tablericons.UserPlus
 import compose.icons.tablericons.Video
-import compose.icons.tablericons.WaveSine
 import compose.icons.tablericons.X
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -255,7 +254,6 @@ fun SettingsContent(
     var lyricsSpacing by remember { mutableFloatStateOf(prefs.getFloat("LyricsSpacing", 1f)) }
     var lyricsAlign by remember { mutableStateOf(prefs.getString("LyricsAlign", LyricsTheme.ALIGN_START) ?: LyricsTheme.ALIGN_START) }
     var lyricsAnimate by remember { mutableStateOf(prefs.getBoolean("LyricsAnimate", true)) }
-    var spicyLyricsEnabled by remember { mutableStateOf(prefs.getBoolean("SpicyLyrics", true)) }
     var fastStartup by remember { mutableStateOf(prefs.getBoolean("FastStartup", false)) }
 
     val context = LocalContext.current
@@ -619,19 +617,6 @@ fun SettingsContent(
                         subtitle = "$lyricsStyleLabel · $lyricsAlignLabel · ${"%.2f".format(lyricsScale)}×",
                         icon = TablerIcons.Playlist,
                         onClick = { showLyricsStyleDialog = true }
-                    )
-
-                    HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-
-                    SettingSwitchTile(
-                        title = stringResource(R.string.settings_spicylyrics),
-                        subtitle = stringResource(R.string.settings_spicylyrics_subtitle),
-                        icon = TablerIcons.WaveSine,
-                        checked = spicyLyricsEnabled,
-                        onCheckedChange = {
-                            spicyLyricsEnabled = it
-                            prefs.edit().putBoolean("SpicyLyrics", it).apply()
-                        }
                     )
 
                     HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))

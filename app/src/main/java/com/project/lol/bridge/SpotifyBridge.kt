@@ -16,7 +16,6 @@ import java.lang.ref.WeakReference
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
-import com.project.lol.spicy.SpicyLyricsClient
 import com.project.lol.util.Logger
 import com.project.lol.webview.helpers.NavToken
 
@@ -364,21 +363,4 @@ class SpotifyBridge(activityRef: WeakReference<Activity>) {
         }
     }
 
-    @Suppress("unused")
-    @JavascriptInterface
-    fun spicyLyrics(trackId: String?, title: String?, artist: String?, duration: Int): String {
-        val id = trackId?.trim().orEmpty()
-        if (id.length != 22) return "null"
-        return try {
-            val payload = SpicyLyricsClient.fetch(id, title?.trim(), artist?.trim(), duration)
-            Logger.d(
-                TAG,
-                "spicyLyrics $id [${title ?: "-"}] dur=$duration -> ${if (payload == null) "miss" else "${payload.length} bytes"}"
-            )
-            payload ?: "null"
-        } catch (e: Exception) {
-            Logger.e(TAG, "spicyLyrics failed $id", e)
-            "null"
-        }
-    }
 }

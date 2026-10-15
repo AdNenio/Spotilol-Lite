@@ -425,7 +425,6 @@ class SpotifyWebViewClient(
         val takeControl = prefs.getBoolean("TakeControl", true)
         val hideEmptyPlayer = prefs.getBoolean("HideEmptyPlayer", false)
         val playlistSortEnabled = prefs.getBoolean("PlaylistSortEnabled", true)
-        val spicyLyricsEnabled = prefs.getBoolean("SpicyLyrics", true)
         val showScrollbar = prefs.getBoolean("ShowScrollbar", true)
         val lyricsStyle = LyricsStyle.from(prefs)
         val webCanvas = prefs.getBoolean("WebCanvas", true)
@@ -436,7 +435,7 @@ class SpotifyWebViewClient(
             TAG,
             "inject: engine=$playerMode autoPlay=$autoPlayMode closeNp=$closeNowPlay amoled=$amoledEnabled " +
                 "logging=$debugOverlay takeControl=$takeControl sort=$playlistSortEnabled " +
-                "spicy=$spicyLyricsEnabled scrollbar=$showScrollbar css=${customCss.length}chars " +
+                "scrollbar=$showScrollbar css=${customCss.length}chars " +
                 "lyrics=${lyricsStyle.preset}/${lyricsStyle.align}/${lyricsStyle.scale}x${lyricsStyle.spacing}"
         )
 
@@ -455,7 +454,6 @@ class SpotifyWebViewClient(
             append("window.__splTakeControl=$takeControl;\n")
             append("window.__splHideEmpty=$hideEmptyPlayer;\n")
             append("window.__splPlaylistSortEnabled=$playlistSortEnabled;\n")
-            append("window.__spicyLyricsEnabled=$spicyLyricsEnabled;\n")
             append("window.__splShowScrollbar=$showScrollbar;\n")
             append("window.__splHideTopBar=$hideTopBar;\n")
             append("window.__splWebPrefs=[$webCanvas,$webVideos];\n")
@@ -489,7 +487,6 @@ class SpotifyWebViewClient(
             append(LibraryAutoClose.CONTENT)
             append(PlaylistSort.CONTENT)
             append(ColumnsButton.CONTENT)
-            append(SpicyLyrics.CONTENT)
             append(WebPrefs.CONTENT)
             append(PlaylistLookupSheet.CONTENT)
             if (playerMode == "spotilol" || playerMode == "fullscreen") {
@@ -586,10 +583,6 @@ class SpotifyWebViewClient(
                 "PlaylistSortEnabled" -> {
                     val sortOn = prefs.getBoolean("PlaylistSortEnabled", true)
                     wv.evaluateJavascript("window.__splPlaylistSortEnabled=$sortOn; if(window.splPlaylistSort) window.splPlaylistSort.refresh();", null)
-                }
-                "SpicyLyrics" -> {
-                    val spicyOn = prefs.getBoolean("SpicyLyrics", true)
-                    wv.evaluateJavascript("window.__spicyLyricsEnabled=$spicyOn; if(window.spicyLyrics) window.spicyLyrics.refresh();", null)
                 }
             }
         }

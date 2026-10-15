@@ -141,7 +141,6 @@ import compose.icons.tablericons.BrandDiscord
 import compose.icons.tablericons.BrightnessUp
 import compose.icons.tablericons.Brush
 import compose.icons.tablericons.Bug
-import compose.icons.tablericons.Car
 import compose.icons.tablericons.Check
 import compose.icons.tablericons.ChevronRight
 import compose.icons.tablericons.Click
@@ -234,7 +233,6 @@ fun SettingsContent(
 ) {
     var autoplayMode by remember { mutableStateOf(prefs.getString("APlayMode", "disabled") ?: "disabled") }
     var takeControl by remember { mutableStateOf(prefs.getBoolean("TakeControl", true)) }
-    var andAuto by remember { mutableStateOf(prefs.getBoolean("AndAuto", true)) }
     var closeNowPlay by remember { mutableStateOf(prefs.getBoolean("CloseNowPlay", false)) }
     // dead code: gui mode is fixed to mobile css and js, see the appearance section
     // var guiMode by remember { mutableStateOf(prefs.getString("GuiMode", "csshack") ?: "csshack") }
@@ -646,19 +644,6 @@ fun SettingsContent(
                         onCheckedChange = {
                             takeControl = it
                             prefs.edit().putBoolean("TakeControl", it).apply()
-                        }
-                    )
-
-                    HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-
-                    SettingSwitchTile(
-                        title = stringResource(R.string.settings_android_auto),
-                        subtitle = stringResource(R.string.settings_android_auto_subtitle),
-                        icon = TablerIcons.Car,
-                        checked = andAuto,
-                        onCheckedChange = {
-                            andAuto = it
-                            prefs.edit().putBoolean("AndAuto", it).apply()
                         }
                     )
 

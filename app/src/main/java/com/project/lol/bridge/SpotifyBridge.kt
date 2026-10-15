@@ -146,8 +146,7 @@ class SpotifyBridge(activityRef: WeakReference<Activity>) {
 
     @JavascriptInterface
     fun playLoaded() {
-        Logger.i(TAG, "play loaded, web player ready")
-        MediaNotificationService.onPlayerLoaded()
+        Logger.i(TAG, "player loaded, web player ready")
         activityRef.get()?.runOnUiThread {
             onPlayLoaded?.invoke()
         }
@@ -167,18 +166,6 @@ class SpotifyBridge(activityRef: WeakReference<Activity>) {
             onMediaStatus?.invoke(it)
             MediaNotificationService.instance?.updateFromMediaStatus(it)
         }
-    }
-
-    @JavascriptInterface
-    fun onMediaItemsLoaded(parentId: String?, json: String?) {
-        Logger.d(CALL, "media items parent=$parentId size=${json?.length ?: 0}")
-        parentId?.let { MediaNotificationService.onMediaItemsLoaded(it, json ?: "[]") }
-    }
-
-    @JavascriptInterface
-    fun onSearchCompleted(query: String?, json: String?) {
-        Logger.d(CALL, "search completed query=$query size=${json?.length ?: 0}")
-        query?.let { MediaNotificationService.onSearchCompleted(it, json ?: "[]") }
     }
 
     @JavascriptInterface

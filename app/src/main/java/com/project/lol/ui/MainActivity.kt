@@ -191,23 +191,6 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
     private val blockServiceWorkerState = mutableStateOf(true)
     private val webViewError = mutableStateOf<Pair<Int, String>?>(null)
     private var pendingLink: String? = null
-    private var pendingMediaSearch: String? = null
-
-    private fun isPlayerUrl(url: String?): Boolean =
-        url != null && (url == "https://open.spotify.com" || url.startsWith("https://open.spotify.com/"))
-
-    private fun captureMediaSearch(intent: Intent): Boolean {
-        if (intent.action != "android.media.action.MEDIA_PLAY_FROM_SEARCH") return false
-        pendingMediaSearch = intent.getStringExtra(android.app.SearchManager.QUERY).orEmpty().take(1024)
-        return true
-    }
-
-    private fun playPendingSearch(view: WebView) {
-        if (!isPlayerUrl(view.url)) return
-        val query = pendingMediaSearch ?: return
-        pendingMediaSearch = null
-        view.evaluateJavascript(com.project.lol.service.MediaSearch.playSearchScript(query), null)
-    }
 
     private lateinit var prefs: SharedPreferences
 
@@ -255,7 +238,6 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
         applyOrientation()
         applyKeepScreenOn()
 
-        captureMediaSearch(intent)
         pendingLink = extractSpotifyLink(intent)
         if (pendingLink != null && !serviceEnabledState.value) {
             setServiceEnabled(true)
@@ -1367,16 +1349,6 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        if (captureMediaSearch(intent)) {
-            webView?.let { view ->
-                if (isPlayerUrl(view.url)) {
-                    view.evaluateJavascript("typeof window.searchMediaItems==='function'") { ready ->
-                        if (ready == "true") playPendingSearch(view)
-                    }
-                }
-            }
-            return
-        }
         val link = extractSpotifyLink(intent)
         Logger.i(TAG, "new intent received: link=${link ?: "none"}")
         if (link == null) {
@@ -1485,7 +1457,6 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
     }
 
     override fun onPlayerReady(view: WebView) {
-        playPendingSearch(view)
     }
 
     override fun attachBaseContext(newBase: Context) {

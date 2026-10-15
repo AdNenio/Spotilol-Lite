@@ -470,7 +470,6 @@ class SpotifyWebViewClient(
             append(LibraryFetcher.CONTENT)
             append(LibraryParser.CONTENT)
             append(PlaybackControls.CONTENT)
-            append(AndroidAuto.CONTENT)
             append(MainLoop.CONTENT)
             append(AutoFeatures.CONTENT)
             append(AndroidTracker.CONTENT)

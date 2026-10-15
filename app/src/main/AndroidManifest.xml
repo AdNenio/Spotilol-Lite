@@ -21,10 +21,6 @@
         android:theme="@style/Theme.Spotilol"
         android:usesCleartextTraffic="false">
 
-        <meta-data
-            android:name="com.google.android.gms.car.application"
-            android:resource="@xml/automotive_app_desc" />
-
         <activity
             android:name=".ui.SplashActivity"
             android:exported="true"
@@ -47,10 +43,6 @@
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.Spotilol">
-            <intent-filter>
-                <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -84,13 +76,9 @@
 
         <service
             android:name=".service.MediaNotificationService"
-            android:exported="true"
+            android:exported="false"
             android:foregroundServiceType="mediaPlayback"
-            tools:targetApi="28">
-            <intent-filter>
-                <action android:name="android.media.browse.MediaBrowserService" />
-            </intent-filter>
-        </service>
+            tools:targetApi="28" />
 
         <receiver
             android:name="androidx.media.session.MediaButtonReceiver"

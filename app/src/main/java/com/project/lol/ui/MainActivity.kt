@@ -215,13 +215,8 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
         }
 
         val uc = UpdateChecker(this)
-        uc.autoCheck { url ->
-            Toast.makeText(this, getString(R.string.main_update_available), Toast.LENGTH_SHORT).show()
-            Handler(Looper.getMainLooper()).postDelayed({
-                try {
-                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                } catch (_: Exception) {}
-            }, 2000)
+        uc.autoCheck {
+            Toast.makeText(this, getString(R.string.main_update_available), Toast.LENGTH_LONG).show()
         }
 
         val loggedIn = prefs.getBoolean("LoggedIn", false)

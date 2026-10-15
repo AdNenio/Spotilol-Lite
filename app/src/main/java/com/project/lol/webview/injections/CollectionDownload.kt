@@ -336,6 +336,7 @@ object CollectionDownload {
             }
         
             function hijack(){
+                if(!pageType()) return;
                 if (window.__splBg) return;
                 var bars = document.querySelectorAll(BAR_SEL);
                 for (var i = 0; i < bars.length; i++) {
@@ -430,7 +431,7 @@ object CollectionDownload {
             }
         
             function tick(){
-                if (window.__splBg) return;
+                if (window.__splBg || window.__splBusy) return;
                 hijack();
                 ensureButtons();
                 syncButtons();

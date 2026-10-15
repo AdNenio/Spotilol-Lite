@@ -45,7 +45,7 @@ class LogEntry internal constructor(
     val throwable: Throwable?
 ) {
     val time: String = Logger.timeOf(timestamp)
-    val stack: String? = throwable?.stackTraceToString()
+    val stack: String? = throwable?.stackTraceToString()?.let(LogRedactor::redact)
 
     fun line(): String {
         val builder = StringBuilder()
@@ -66,7 +66,9 @@ object Logger {
 
     private const val PREF_KEY = "Logging"
     private const val LEGACY_PREF_KEY = "DebugOverlay"
+    private const val PREF_KEY_AUTOSCROLL = "LoggerAutoScroll"
     private const val MAX_MESSAGE = 4000
+    private const val MAX_ENTRIES = 4000
     private const val APP_TAG = "app"
 
     private val timeFmt: DateTimeFormatter =
@@ -98,6 +100,17 @@ object Logger {
             .apply()
     }
 
+    fun isAutoScroll(context: Context): Boolean =
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(PREF_KEY_AUTOSCROLL, true)
+
+    fun setAutoScroll(context: Context, enabled: Boolean) {
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(PREF_KEY_AUTOSCROLL, enabled)
+            .apply()
+    }
+
     fun timeOf(timestamp: Long): String = timeFmt.format(Instant.ofEpochMilli(timestamp))
 
     fun entries(): List<LogEntry> = synchronized(lock) { ArrayList(buf) }
@@ -111,8 +124,8 @@ object Logger {
     fun log(level: LogLevel, tag: String, message: String?, throwable: Throwable? = null) {
         val enabled = enabledFlag.get()
         if (!enabled && level.priority < LogLevel.WARN.priority) return
-        val text = (message ?: throwable?.message ?: "").take(MAX_MESSAGE)
         val safeTag = tag.ifBlank { APP_TAG }
+        val text = LogRedactor.redact((message ?: throwable?.message ?: "").take(MAX_MESSAGE))
         if (enabled) {
             val entry = LogEntry(
                 seq.incrementAndGet(),
@@ -124,14 +137,17 @@ object Logger {
             )
             synchronized(lock) {
                 buf.addLast(entry)
+                while (buf.size > MAX_ENTRIES) buf.removeFirst()
             }
         }
+        val detail = throwable?.let { LogRedactor.redact(it.stackTraceToString()) }
+        val console = if (detail.isNullOrBlank()) text else "$text\n$detail"
         when (level) {
-            LogLevel.VERBOSE -> Log.v(safeTag, text, throwable)
-            LogLevel.DEBUG -> Log.d(safeTag, text, throwable)
-            LogLevel.INFO, LogLevel.SYS -> Log.i(safeTag, text, throwable)
-            LogLevel.WARN -> Log.w(safeTag, text, throwable)
-            LogLevel.ERROR -> Log.e(safeTag, text, throwable)
+            LogLevel.VERBOSE -> Log.v(safeTag, console)
+            LogLevel.DEBUG -> Log.d(safeTag, console)
+            LogLevel.INFO, LogLevel.SYS -> Log.i(safeTag, console)
+            LogLevel.WARN -> Log.w(safeTag, console)
+            LogLevel.ERROR -> Log.e(safeTag, console)
         }
     }
 

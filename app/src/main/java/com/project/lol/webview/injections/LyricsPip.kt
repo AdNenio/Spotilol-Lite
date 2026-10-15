@@ -109,6 +109,11 @@ object LyricsPip {
                     var a=(btns[i].getAttribute('aria-label')||'').trim();
                     if(a==='Minimize Now Playing view') return btns[i];
                 }
+                var all=document.querySelectorAll('button');
+                for(var j=0;j<all.length;j++){
+                    var p=all[j].querySelector('svg path');
+                    if(p && (p.getAttribute('d')||'').indexOf('M14.53 1.47')===0) return all[j];
+                }
                 return null;
             }
 

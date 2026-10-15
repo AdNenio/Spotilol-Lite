@@ -108,7 +108,10 @@ object PlayerCore {
                 if(s!==null) window.__splLastPlaying=s;
                 return window.__splLastPlaying===true;
             };
-
-        
+            window.splQ=function(sel){
+                var c=(window.__splQc||(window.__splQc={}))[sel];
+                if(!c||!c.isConnected){ c=document.querySelector(sel); window.__splQc[sel]=c; }
+                return c;
+            };
     """
 }

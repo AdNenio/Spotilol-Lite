@@ -92,11 +92,25 @@ object ErrorDialogRestyle {
                 }
             }
 
+            var pending = [];
+            var flushTimer = null;
+            function flushPending(){
+                flushTimer = null;
+                if (window.__splBusy) { flushTimer = setTimeout(flushPending, 300); return; }
+                var batch = pending; pending = [];
+                for (var i = 0; i < batch.length; i++) scan(batch[i]);
+            }
             var obs = new MutationObserver(function(muts){
                 for (var i = 0; i < muts.length; i++){
                     var a = muts[i].addedNodes;
                     for (var j = 0; j < a.length; j++) {
-                        if (a[j].nodeType === 1) scan(a[j]);
+                        if (a[j].nodeType !== 1) continue;
+                        if (window.__splBusy) {
+                            if (pending.length < 200) pending.push(a[j]);
+                            if (!flushTimer) flushTimer = setTimeout(flushPending, 300);
+                        } else {
+                            scan(a[j]);
+                        }
                     }
                 }
             });

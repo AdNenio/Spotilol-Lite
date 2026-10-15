@@ -5,15 +5,17 @@ object WebPrefs {
         (function(){
             if(window.splSyncWebPrefs) return;
             var busy=false;
+            var queued=null;
             window.splSyncWebPrefs=function(canvas,videos,force){
                 var want=(canvas?'c1':'c0')+(videos?'v1':'v0');
                 var done=null;
                 try{ done=localStorage.getItem('splWebPrefs'); }catch(e){}
-                if((!force&&done===want)||busy) return;
+                if(!force&&done===want) return;
+                if(busy){ queued=[canvas,videos]; return; }
                 busy=true;
                 var back=location.pathname!=='/preferences';
                 if(back){
-                    history.pushState({},'','/preferences');
+                    history.pushState({splSynthetic:1},'','/preferences');
                     window.dispatchEvent(new PopStateEvent('popstate',{state:null}));
                 }
                 var tries=0;
@@ -28,7 +30,14 @@ object WebPrefs {
                         });
                     }
                     try{ localStorage.setItem('splWebPrefs',want); }catch(e){}
-                    setTimeout(function(){ if(back) history.back(); busy=false; },400);
+                    setTimeout(function(){
+                        try{
+                            var st=history.state;
+                            if(back&&((st&&st.splSynthetic)||location.pathname==='/preferences')) history.back();
+                        }catch(e){}
+                        busy=false;
+                        if(queued){ var q=queued; queued=null; window.splSyncWebPrefs(q[0],q[1],true); }
+                    },400);
                 },250);
             };
             var waited=0;

@@ -87,7 +87,8 @@ object MediaUpdater {
             window.splEnsureTrackMeta = function(id){
                 if(!id) return Promise.resolve();
                 window.__splMetaRuns = window.__splMetaRuns || {};
-                var existing = window.__splTrackMeta && window.__splTrackMeta[id];
+                window.__splTrackMeta = window.__splTrackMeta || {};
+                var existing = window.__splTrackMeta[id] || null;
                 if(existing && existing.album != null) return Promise.resolve();
                 if(window.__splMetaRuns[id]) return window.__splMetaRuns[id];
 
@@ -96,16 +97,16 @@ object MediaUpdater {
 
                 var promote = function(){
                     if(window.splPlayingTrackId() !== id) return;
-                    var m = window.__splTrackMeta[id];
+                    var m = window.__splTrackMeta && window.__splTrackMeta[id];
                     var s = sigOf(m);
                     if(s === lastSig) return;
                     lastSig = s;
                     window.__curTrackId = id;
                     window.__curTrackUri = 'spotify:track:' + id;
-                    if(m.name) window.__curTrackName = m.name;
-                    if(m.artist) window.__curTrackArtist = m.artist;
-                    if(m.album) window.__curTrackAlbum = m.album;
-                    if(m.cover) window.__curTrackCover = m.cover;
+                    if(m && m.name) window.__curTrackName = m.name;
+                    if(m && m.artist) window.__curTrackArtist = m.artist;
+                    if(m && m.album) window.__curTrackAlbum = m.album;
+                    if(m && m.cover) window.__curTrackCover = m.cover;
                     window.lastState = null;
                     if(window.updMedia && typeof track !== 'undefined'){ try{ window.updMedia(); }catch(e){} }
                 };
@@ -118,7 +119,7 @@ object MediaUpdater {
                         if(rm) window.splMergeTrackMeta(id, rm);
                     }catch(e){}
                     promote();
-                    var m = window.__splTrackMeta[id];
+                    var m = window.__splTrackMeta && window.__splTrackMeta[id];
                     if((m && m.album != null) || n >= 3){
                         delete window.__splMetaRuns[id];
                         resolve();
@@ -153,12 +154,24 @@ object MediaUpdater {
                 }
             };
 
+            window.__splEnsureTrackMetaSafe = function(id){
+                try{
+                    var p = window.splEnsureTrackMeta(id);
+                    if(p && typeof p.catch === 'function'){
+                        p.catch(function(e){
+                            try{ AndBridge.dbg('e','meta ensure failed: '+(e&&e.message||e)); }catch(_){}
+                        });
+                    }
+                    return p;
+                }catch(e){ return null; }
+            };
+
             try {
                 if(typeof window.splOnTrackChange === 'function'){
                     window.splOnTrackChange(function(uri, id){
                         if(!id) return;
                         if(window.__curTrackId === id){
-                            window.splEnsureTrackMeta(id);
+                            window.__splEnsureTrackMetaSafe(id);
                             return;
                         }
                         var m = (window.__splTrackMeta && window.__splTrackMeta[id]) || null;
@@ -169,7 +182,7 @@ object MediaUpdater {
                         window.__curTrackAlbum = m ? m.album : null;
                         window.__curTrackCover = m ? m.cover : null;
                         window.lastState = null;
-                        window.splEnsureTrackMeta(id);
+                        window.__splEnsureTrackMetaSafe(id);
                         if(typeof track !== 'undefined'){ try{ window.updMedia(); }catch(e){} }
                     });
                 }

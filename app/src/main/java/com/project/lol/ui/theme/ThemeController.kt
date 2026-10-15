@@ -9,6 +9,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import com.project.lol.widget.WidgetActions
 import java.util.Locale
 
 object ThemeController {
@@ -17,6 +18,7 @@ object ThemeController {
     private const val KEY_PRESET = "ThemePreset"
     private const val KEY_DYNAMIC = "MaterialYou"
     private const val KEY_AMOLED = "AmoledTheme"
+    private const val KEY_SECONDARY = "ThemeSecondary"
     private const val BRIGHTEN_FACTOR = 0.12f
 
     var presetId by mutableStateOf(ThemePresets.DEFAULT_ID)
@@ -25,16 +27,22 @@ object ThemeController {
         private set
     var amoled by mutableStateOf(false)
         private set
+    var secondary by mutableStateOf<Color?>(null)
+        private set
 
     private var prefs: SharedPreferences? = null
+    private var appContext: Context? = null
 
     fun init(context: Context) {
         if (prefs != null) return
+        appContext = context.applicationContext
         prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        CustomThemes.init(context)
         val p = prefs!!
         presetId = p.getString(KEY_PRESET, ThemePresets.DEFAULT_ID)
             ?.takeIf { ThemePresets.byId.containsKey(it) }
             ?: ThemePresets.DEFAULT_ID
+        secondary = ThemeHarmony.parseHex(p.getString(KEY_SECONDARY, null))
         dynamicColor = p.getBoolean(KEY_DYNAMIC, false)
         amoled = p.getBoolean(KEY_AMOLED, false)
     }
@@ -42,19 +50,35 @@ object ThemeController {
     fun updatePreset(id: String) {
         presetId = if (ThemePresets.byId.containsKey(id)) id else ThemePresets.DEFAULT_ID
         save()
+        refreshWidgets()
+    }
+
+    fun updateSecondary(color: Color?) {
+        secondary = color
+        save()
+        refreshWidgets()
+    }
+
+    fun importThemes(themes: List<ThemePreset>): List<ThemePreset> = themes.map { CustomThemes.add(it) }
+
+    fun removeCustomTheme(id: String) {
+        CustomThemes.remove(id)
+        if (presetId == id) updatePreset(ThemePresets.DEFAULT_ID)
     }
 
     fun updateDynamicColor(value: Boolean) {
         dynamicColor = value
         save()
+        refreshWidgets()
     }
 
     fun updateAmoled(value: Boolean) {
         amoled = value
         save()
+        refreshWidgets()
     }
 
-    fun resolvePalette(): ThemePalette = ThemePresets.resolve(presetId)
+    fun resolvePalette(): ThemePalette = ThemePresets.resolve(presetId).harmonized(secondary)
 
     fun accentColor(context: Context): Color =
         if (dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -89,6 +113,11 @@ object ThemeController {
             ?.putString(KEY_PRESET, presetId)
             ?.putBoolean(KEY_DYNAMIC, dynamicColor)
             ?.putBoolean(KEY_AMOLED, amoled)
+            ?.putString(KEY_SECONDARY, secondary?.let { ThemeHarmony.toHex(it) })
             ?.apply()
+    }
+
+    private fun refreshWidgets() {
+        appContext?.let { WidgetActions.refreshAll(it) }
     }
 }

@@ -3,6 +3,7 @@ package com.project.lol.offline
 import android.content.Context
 import android.content.SharedPreferences
 import android.net.Uri
+import com.project.lol.offline.lyrics.LyricsSource
 
 enum class DownloadFormat(val ext: String, val mime: String) {
     M4A("m4a", "audio/mp4"),
@@ -21,6 +22,10 @@ object DownloadPrefs {
     private const val KEY_FOLDER = "DlFolderUri"
     private const val KEY_FOLDER_HISTORY = "DlFolderHistory"
     private const val KEY_TAGS = "DlTags"
+    private const val KEY_LYRICS = "DlLyrics"
+    private const val KEY_LYRICS_SOURCE = "DlLyricsSource"
+    private const val KEY_LYRICS_EMBED = "DlLyricsEmbed"
+    private const val KEY_LYRICS_SIDECAR = "DlLyricsSidecar"
 
     const val DEFAULT_SUBFOLDER = "Spotilol"
 
@@ -97,5 +102,45 @@ object DownloadPrefs {
     @JvmStatic
     fun setWriteTags(context: Context, value: Boolean) {
         prefs(context).edit().putBoolean(KEY_TAGS, value).apply()
+    }
+
+    /** Master switch: fetch lyrics while a track is being downloaded. */
+    @JvmStatic
+    fun lyrics(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_LYRICS, false)
+
+    @JvmStatic
+    fun setLyrics(context: Context, value: Boolean) {
+        prefs(context).edit().putBoolean(KEY_LYRICS, value).apply()
+    }
+
+    /** Which provider lyrics come from. */
+    @JvmStatic
+    fun lyricsSource(context: Context): LyricsSource =
+        LyricsSource.from(prefs(context).getString(KEY_LYRICS_SOURCE, null))
+
+    @JvmStatic
+    fun setLyricsSource(context: Context, value: LyricsSource) {
+        prefs(context).edit().putString(KEY_LYRICS_SOURCE, value.id).apply()
+    }
+
+    /** Embed the lyrics into the ID3/M4A tags, so any player outside the app can read them. */
+    @JvmStatic
+    fun lyricsEmbed(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_LYRICS_EMBED, true)
+
+    @JvmStatic
+    fun setLyricsEmbed(context: Context, value: Boolean) {
+        prefs(context).edit().putBoolean(KEY_LYRICS_EMBED, value).apply()
+    }
+
+    /** Also drop a `.lrc` file next to the audio. */
+    @JvmStatic
+    fun lyricsSidecar(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_LYRICS_SIDECAR, false)
+
+    @JvmStatic
+    fun setLyricsSidecar(context: Context, value: Boolean) {
+        prefs(context).edit().putBoolean(KEY_LYRICS_SIDECAR, value).apply()
     }
 }

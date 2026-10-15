@@ -4,7 +4,6 @@ import android.graphics.Bitmap
 import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
-import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.project.lol.R
@@ -18,14 +17,14 @@ data class WidgetState(
     val repeat: String = "false",
     val position: Long = 0L,
     val duration: Long = 0L,
-    val accent: Int = 0xFF1DB954.toInt(),
     val source: String = SOURCE_WEB,
     val cover: Bitmap? = null
 ) {
     val hasTrack: Boolean get() = title.isNotEmpty()
 
     val offline: Boolean get() = source == SOURCE_OFFLINE
-    val supportsExtras: Boolean get() = !offline
+    val supportsRepeat: Boolean get() = !offline
+    val supportsFavorite: Boolean get() = !offline
 
     val shuffleOn: Boolean get() = shuffle == "shuffle" || shuffle == "smart"
     val smartShuffle: Boolean get() = shuffle == "smart"
@@ -63,7 +62,6 @@ data class WidgetState(
         prefs[WidgetKeys.REPEAT] = repeat
         prefs[WidgetKeys.POSITION] = position
         prefs[WidgetKeys.DURATION] = duration
-        prefs[WidgetKeys.ACCENT] = accent
         prefs[WidgetKeys.SOURCE] = source
         prefs[WidgetKeys.COVER_VERSION] = coverVersion
     }
@@ -81,7 +79,6 @@ data class WidgetState(
             repeat = prefs[WidgetKeys.REPEAT] ?: "false",
             position = prefs[WidgetKeys.POSITION] ?: 0L,
             duration = prefs[WidgetKeys.DURATION] ?: 0L,
-            accent = prefs[WidgetKeys.ACCENT] ?: 0xFF1DB954.toInt(),
             source = prefs[WidgetKeys.SOURCE] ?: SOURCE_WEB
         )
 
@@ -98,7 +95,6 @@ internal object WidgetKeys {
     val REPEAT = stringPreferencesKey("w_repeat")
     val POSITION = longPreferencesKey("w_position")
     val DURATION = longPreferencesKey("w_duration")
-    val ACCENT = intPreferencesKey("w_accent")
     val SOURCE = stringPreferencesKey("w_source")
     val COVER_VERSION = longPreferencesKey("w_cover_version")
 }

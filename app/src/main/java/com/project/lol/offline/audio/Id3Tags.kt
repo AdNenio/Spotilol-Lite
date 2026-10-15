@@ -21,6 +21,9 @@ internal object Id3Tags {
     private const val UTF8 = 3
     private const val PICTURE_TYPE_COVER_FRONT = 3
 
+    /** ISO 639-2 "XXX" = unspecified language, accepted by every parser. */
+    private const val LANGUAGE_UNSPECIFIED = "XXX"
+
     fun writeTags(
         file: File,
         title: String,
@@ -30,6 +33,7 @@ internal object Id3Tags {
         trackNumber: Int? = null,
         discNumber: Int? = null,
         year: Int? = null,
+        lyrics: String? = null,
     ): Boolean {
         val audioStart = existingTagSize(file)
         val audioEnd = file.length() - id3v1Size(file)
@@ -38,7 +42,7 @@ internal object Id3Tags {
         val temp = File(file.parentFile, "${file.name}.tagged")
         try {
             BufferedOutputStream(FileOutputStream(temp)).use { out ->
-                out.write(buildTag(title, artist, album, cover, trackNumber, discNumber, year))
+                out.write(buildTag(title, artist, album, cover, trackNumber, discNumber, year, lyrics))
                 BufferedInputStream(FileInputStream(file)).use { input ->
                     var toSkip = audioStart.toLong()
                     while (toSkip > 0) {
@@ -77,6 +81,7 @@ internal object Id3Tags {
         trackNumber: Int?,
         discNumber: Int?,
         year: Int?,
+        lyrics: String?,
     ): ByteArray {
         val frames = ByteArrayOutputStream()
         writeTextFrame(frames, "TIT2", title)
@@ -85,6 +90,7 @@ internal object Id3Tags {
         if (trackNumber != null && trackNumber > 0) writeTextFrame(frames, "TRCK", trackNumber.toString())
         if (discNumber != null && discNumber > 0) writeTextFrame(frames, "TPOS", discNumber.toString())
         if (year != null && year > 0) writeTextFrame(frames, "TDRC", year.toString())
+        if (lyrics != null && lyrics.isNotBlank()) writeLyricsFrame(frames, lyrics)
         if (cover != null && cover.isNotEmpty()) writePictureFrame(frames, cover)
 
         val body = frames.toByteArray()
@@ -107,6 +113,19 @@ internal object Id3Tags {
         payload[0] = UTF8.toByte()
         System.arraycopy(text, 0, payload, 1, text.size)
         writeFrame(out, id, payload)
+    }
+
+    /**
+     * `USLT` - unsynchronised lyrics. Layout: encoding byte, 3-byte language, content
+     * descriptor (empty, so a single 0x00 terminator with UTF-8), then the text.
+     */
+    private fun writeLyricsFrame(out: ByteArrayOutputStream, lyrics: String) {
+        val payload = ByteArrayOutputStream()
+        payload.write(UTF8)
+        payload.write(LANGUAGE_UNSPECIFIED.toByteArray(Charsets.US_ASCII))
+        payload.write(0)
+        payload.write(lyrics.toByteArray(Charsets.UTF_8))
+        writeFrame(out, "USLT", payload.toByteArray())
     }
 
     private fun writePictureFrame(out: ByteArrayOutputStream, cover: ByteArray) {

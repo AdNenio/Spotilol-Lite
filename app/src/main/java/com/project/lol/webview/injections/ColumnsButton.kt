@@ -81,7 +81,7 @@ object ColumnsButton {
             }
 
             ensure();
-            setInterval(ensure, 1000);
+            setInterval(function(){ if (window.__splBg || window.__splBusy) return; ensure(); }, 1000);
         })();
     """
 }

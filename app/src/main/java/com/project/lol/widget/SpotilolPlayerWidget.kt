@@ -4,7 +4,6 @@ import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.graphics.Bitmap
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -13,6 +12,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.glance.ColorFilter
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
+import androidx.glance.GlanceTheme
 import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.LocalContext
@@ -49,29 +49,25 @@ import com.project.lol.R
 import com.project.lol.ui.MainActivity
 import com.project.lol.ui.OfflineActivity
 
-private val SURFACE = Color(0xFF1D1D20)
-private val SCRIM = Color(0xCC1D1D20)
-private val BUTTON_SURFACE = Color(0x24FFFFFF)
-private val TITLE_COLOR = Color(0xFFF2F2F4)
-private val SUBTITLE_COLOR = Color(0xFFAEAEB4)
-private val PROGRESS_TRACK = Color(0x33FFFFFF)
 private const val RADIUS = 18
-private const val ICON_TINT = 0xFFE6E6EA.toInt()
-private const val ICON_DISABLED_TINT = 0xFF6A6A70.toInt()
-private const val PLAY_ICON_TINT = 0xFF101010.toInt()
 
 class SpotilolPlayerWidget : GlanceAppWidget() {
 
     override val sizeMode: SizeMode = SizeMode.Responsive(
         setOf(
             DpSize(180.dp, 48.dp),
-            DpSize(260.dp, 110.dp)
+            DpSize(250.dp, 72.dp),
+            DpSize(250.dp, 110.dp),
+            DpSize(250.dp, 190.dp)
         )
     )
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
+        val providers = WidgetTheme.colorProviders(context)
         provideContent {
-            PlayerContent()
+            GlanceTheme(colors = providers) {
+                PlayerContent()
+            }
         }
     }
 }
@@ -89,45 +85,48 @@ class SpotilolPlayerWidgetReceiver : GlanceAppWidgetReceiver() {
 private fun PlayerContent() {
     val prefs = currentState<Preferences>()
     val state = WidgetState.from(prefs)
+    val config = WidgetConfig.from(prefs)
     val version = WidgetState.coverVersionOf(prefs)
     val size = LocalSize.current
     val context = LocalContext.current
 
     if (!state.hasTrack) {
-        EmptyContent(state, context)
+        EmptyContent(state, config, context)
         return
     }
 
-    if (size.height < 60.dp) {
-        MiniContent(state, version, context)
-    } else {
-        FullContent(state, version, context)
+    when {
+        config.layout == WidgetLayout.ART -> ArtContent(state, config, version, context)
+        config.layout == WidgetLayout.COMPACT || size.height < 80.dp -> CompactContent(state, config, version, context)
+        else -> StandardContent(state, config, version, context)
     }
 }
 
-private fun tint(color: Int): ColorFilter = ColorFilter.tint(ColorProvider(Color(color)))
+private fun tint(provider: ColorProvider): ColorFilter = ColorFilter.tint(provider)
 
 private fun openAction(offline: Boolean): Action =
     if (offline) actionStartActivity(OfflineActivity::class.java)
     else actionStartActivity(MainActivity::class.java)
 
+@Composable
 private fun frame(cover: Bitmap?): GlanceModifier {
     val base = GlanceModifier.fillMaxSize()
     val filled = if (cover != null) {
         base.background(ImageProvider(cover), ContentScale.Crop)
     } else {
-        base.background(ColorProvider(SURFACE))
+        base.background(GlanceTheme.colors.surface)
     }
     return filled.cornerRadius(RADIUS.dp)
 }
 
+@Composable
 private fun scrim(): GlanceModifier = GlanceModifier
     .fillMaxSize()
-    .background(ColorProvider(SCRIM))
+    .background(withAlpha(GlanceTheme.colors.surface, WIDGET_SCRIM_ALPHA))
     .cornerRadius(RADIUS.dp)
 
 @Composable
-private fun EmptyContent(state: WidgetState, context: Context) {
+private fun EmptyContent(state: WidgetState, config: WidgetConfig, context: Context) {
     Box(modifier = frame(null)) {
         Row(
             modifier = scrim().clickable(openAction(state.offline)).padding(10.dp),
@@ -143,98 +142,218 @@ private fun EmptyContent(state: WidgetState, context: Context) {
                 Text(
                     text = context.getString(R.string.widget_empty_title),
                     maxLines = 1,
-                    style = TextStyle(color = ColorProvider(TITLE_COLOR), fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    style = TextStyle(
+                        color = GlanceTheme.colors.onSurface,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
                 )
-                Text(
-                    text = context.getString(R.string.widget_empty_subtitle),
-                    maxLines = 1,
-                    style = TextStyle(color = ColorProvider(SUBTITLE_COLOR), fontSize = 12.sp)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun FullContent(state: WidgetState, version: Long, context: Context) {
-    val cover = CoverCache.load(context, version)
-    Box(modifier = frame(cover)) {
-        Column(modifier = scrim().padding(10.dp)) {
-            Row(
-                modifier = GlanceModifier.fillMaxWidth().defaultWeight(),
-                verticalAlignment = Alignment.Vertical.CenterVertically
-            ) {
-                Row(
-                    modifier = GlanceModifier.defaultWeight().clickable(openAction(state.offline)),
-                    verticalAlignment = Alignment.Vertical.CenterVertically
-                ) {
-                    Cover(cover, 46.dp, 10.dp)
-                    Spacer(GlanceModifier.width(11.dp))
-                    Column(modifier = GlanceModifier.defaultWeight()) {
-                        Text(
-                            text = state.title,
-                            maxLines = 1,
-                            style = TextStyle(color = ColorProvider(TITLE_COLOR), fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                        )
-                        Text(
-                            text = state.artist,
-                            maxLines = 1,
-                            style = TextStyle(color = ColorProvider(SUBTITLE_COLOR), fontSize = 12.sp)
-                        )
-                        Spacer(GlanceModifier.height(7.dp))
-                        ProgressBar(state)
-                    }
-                }
-                if (state.supportsExtras) {
-                    Spacer(GlanceModifier.width(8.dp))
-                    CircleIconButton(
-                        resId = state.favoriteIcon,
-                        contentDescription = context.getString(if (state.favorite) R.string.notif_action_unlike else R.string.notif_action_like),
-                        iconTint = if (state.favorite) state.accent else ICON_TINT,
-                        dimension = 26.dp,
-                        iconSize = 14.dp,
-                        action = actionRunCallback<FavoriteAction>()
+                if (config.layout != WidgetLayout.COMPACT) {
+                    Text(
+                        text = context.getString(R.string.widget_empty_subtitle),
+                        maxLines = 1,
+                        style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 12.sp)
                     )
                 }
             }
-            Spacer(GlanceModifier.height(6.dp))
-            Controls(state, context)
         }
     }
 }
 
 @Composable
-private fun MiniContent(state: WidgetState, version: Long, context: Context) {
-    val cover = CoverCache.load(context, version)
-    Box(modifier = frame(cover)) {
+private fun StandardContent(state: WidgetState, config: WidgetConfig, version: Long, context: Context) {
+    val cover = if (config.showCover) CoverCache.load(context, version) else null
+    Box(modifier = frame(if (config.useCoverArt) cover else null)) {
+        Column(modifier = scrim().padding(10.dp)) {
+            val showFavorite = config.showFavorite && state.supportsFavorite
+            val showBadge = state.offline
+            if (config.hasInfo || config.showThumbnail || showFavorite || showBadge) {
+                Row(
+                    modifier = GlanceModifier.fillMaxWidth().defaultWeight(),
+                    verticalAlignment = Alignment.Vertical.CenterVertically
+                ) {
+                    Row(
+                        modifier = GlanceModifier.defaultWeight().clickable(openAction(state.offline)),
+                        verticalAlignment = Alignment.Vertical.CenterVertically
+                    ) {
+                        if (config.showThumbnail) {
+                            Cover(cover, 46.dp, 10.dp)
+                            Spacer(GlanceModifier.width(11.dp))
+                        }
+                        Column(modifier = GlanceModifier.defaultWeight()) {
+                            if (config.showTitle) {
+                                Text(
+                                    text = state.title,
+                                    maxLines = 1,
+                                    style = TextStyle(
+                                        color = GlanceTheme.colors.onSurface,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                )
+                            }
+                            if (config.showArtist) {
+                                Text(
+                                    text = state.artist,
+                                    maxLines = 1,
+                                    style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 12.sp)
+                                )
+                            }
+                            if (config.showProgress && state.duration > 0L) {
+                                if (config.showTitle || config.showArtist) Spacer(GlanceModifier.height(7.dp))
+                                ProgressBar(state)
+                            }
+                        }
+                    }
+                    if (showBadge) {
+                        Spacer(GlanceModifier.width(8.dp))
+                        OfflineBadge()
+                    } else if (showFavorite) {
+                        Spacer(GlanceModifier.width(8.dp))
+                        CircleIconButton(
+                            resId = state.favoriteIcon,
+                            contentDescription = context.getString(if (state.favorite) R.string.notif_action_unlike else R.string.notif_action_like),
+                            iconTint = if (state.favorite) GlanceTheme.colors.primary else GlanceTheme.colors.onSurface,
+                            dimension = 26.dp,
+                            iconSize = 14.dp,
+                            action = actionRunCallback<FavoriteAction>()
+                        )
+                    }
+                }
+            }
+            if (config.hasControls) {
+                if (config.hasInfo || config.showThumbnail || showFavorite || showBadge) Spacer(GlanceModifier.height(6.dp))
+                Controls(state, config, context)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompactContent(state: WidgetState, config: WidgetConfig, version: Long, context: Context) {
+    val cover = if (config.showCover) CoverCache.load(context, version) else null
+    Box(modifier = frame(if (config.useCoverArt) cover else null)) {
         Row(
             modifier = scrim().clickable(openAction(state.offline)).padding(8.dp),
             verticalAlignment = Alignment.Vertical.CenterVertically
         ) {
-            Cover(cover, 32.dp, 9.dp)
-            Spacer(GlanceModifier.width(10.dp))
-            Column(modifier = GlanceModifier.defaultWeight()) {
-                Text(
-                    text = state.title,
-                    maxLines = 1,
-                    style = TextStyle(color = ColorProvider(TITLE_COLOR), fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                )
-                Text(
-                    text = state.artist,
-                    maxLines = 1,
-                    style = TextStyle(color = ColorProvider(SUBTITLE_COLOR), fontSize = 11.sp)
+            if (config.showThumbnail) {
+                Cover(cover, 32.dp, 9.dp)
+                Spacer(GlanceModifier.width(10.dp))
+            }
+            if (config.showTitle || config.showArtist) {
+                Column(modifier = GlanceModifier.defaultWeight()) {
+                    if (config.showTitle) {
+                        Text(
+                            text = state.title,
+                            maxLines = 1,
+                            style = TextStyle(
+                                color = GlanceTheme.colors.onSurface,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        )
+                    }
+                    if (config.showArtist) {
+                        Text(
+                            text = state.artist,
+                            maxLines = 1,
+                            style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 11.sp)
+                        )
+                    }
+                }
+            } else {
+                Spacer(GlanceModifier.defaultWeight())
+            }
+            if (config.showSkip) {
+                Spacer(GlanceModifier.width(6.dp))
+                CircleIconButton(
+                    resId = R.drawable.ic_skip_prev,
+                    contentDescription = context.getString(R.string.notif_action_previous),
+                    iconTint = GlanceTheme.colors.onSurface,
+                    dimension = 26.dp,
+                    iconSize = 14.dp,
+                    action = actionRunCallback<PreviousAction>()
                 )
             }
-            Spacer(GlanceModifier.width(8.dp))
-            CircleIconButton(
-                resId = state.playPauseIcon,
-                contentDescription = context.getString(if (state.playing) R.string.notif_action_pause else R.string.notif_action_play),
-                iconTint = PLAY_ICON_TINT,
-                background = Color(state.accent),
-                dimension = 30.dp,
-                iconSize = 15.dp,
-                action = actionRunCallback<PlayPauseAction>()
-            )
+            if (config.showPlayPause) {
+                Spacer(GlanceModifier.width(6.dp))
+                CircleIconButton(
+                    resId = state.playPauseIcon,
+                    contentDescription = context.getString(if (state.playing) R.string.notif_action_pause else R.string.notif_action_play),
+                    iconTint = GlanceTheme.colors.onPrimary,
+                    background = GlanceTheme.colors.primary,
+                    dimension = 30.dp,
+                    iconSize = 15.dp,
+                    action = actionRunCallback<PlayPauseAction>()
+                )
+            }
+            if (config.showSkip) {
+                Spacer(GlanceModifier.width(6.dp))
+                CircleIconButton(
+                    resId = R.drawable.ic_skip_next,
+                    contentDescription = context.getString(R.string.notif_action_next),
+                    iconTint = GlanceTheme.colors.onSurface,
+                    dimension = 26.dp,
+                    iconSize = 14.dp,
+                    action = actionRunCallback<NextAction>()
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ArtContent(state: WidgetState, config: WidgetConfig, version: Long, context: Context) {
+    val cover = if (config.showCover) CoverCache.load(context, version) else null
+    Box(
+        modifier = frame(if (config.useCoverArt) cover else null),
+        contentAlignment = Alignment.BottomStart
+    ) {
+        val showPlay = config.showPlayPause
+        val showTitle = config.showTitle
+        if (showPlay || showTitle) {
+            Row(
+                modifier = GlanceModifier.padding(10.dp),
+                verticalAlignment = Alignment.Vertical.CenterVertically
+            ) {
+                if (showPlay) {
+                    Box(
+                        modifier = GlanceModifier
+                            .size(40.dp)
+                            .background(withAlpha(GlanceTheme.colors.surface, WIDGET_SCRIM_ALPHA))
+                            .cornerRadius(12.dp)
+                            .clickable(actionRunCallback<PlayPauseAction>()),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Image(
+                            provider = ImageProvider(state.playPauseIcon),
+                            contentDescription = context.getString(if (state.playing) R.string.notif_action_pause else R.string.notif_action_play),
+                            modifier = GlanceModifier.size(16.dp),
+                            colorFilter = tint(GlanceTheme.colors.onSurface)
+                        )
+                    }
+                }
+                if (showTitle) {
+                    if (showPlay) Spacer(GlanceModifier.width(8.dp))
+                    Box(
+                        modifier = GlanceModifier
+                            .background(withAlpha(GlanceTheme.colors.surface, WIDGET_SCRIM_ALPHA))
+                            .cornerRadius(20.dp)
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = state.title,
+                            maxLines = 1,
+                            style = TextStyle(
+                                color = GlanceTheme.colors.onSurface,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -252,7 +371,7 @@ private fun Cover(bitmap: Bitmap?, dimension: Dp, radius: Dp) {
         Box(
             modifier = GlanceModifier
                 .size(dimension)
-                .background(ColorProvider(Color(0x33FFFFFF)))
+                .background(withAlpha(GlanceTheme.colors.onSurface, WIDGET_TRACK_ALPHA))
                 .cornerRadius(radius),
             contentAlignment = Alignment.Center
         ) {
@@ -271,23 +390,29 @@ private fun ProgressBar(state: WidgetState) {
     LinearProgressIndicator(
         progress = state.progress,
         modifier = GlanceModifier.fillMaxWidth().height(3.dp).cornerRadius(2.dp),
-        color = ColorProvider(Color(state.accent)),
-        backgroundColor = ColorProvider(PROGRESS_TRACK)
+        color = GlanceTheme.colors.primary,
+        backgroundColor = withAlpha(GlanceTheme.colors.onSurface, WIDGET_TRACK_ALPHA)
     )
 }
 
 @Composable
-private fun Controls(state: WidgetState, context: Context) {
+private fun Controls(state: WidgetState, config: WidgetConfig, context: Context) {
+    val showShuffle = config.showShuffleRepeat
+    val showRepeat = config.showShuffleRepeat && state.supportsRepeat
+    val showPlay = config.showPlayPause
+    val showSkip = config.showSkip
+    if (!showShuffle && !showRepeat && !showSkip && !showPlay) return
+
     Row(
         modifier = GlanceModifier.fillMaxWidth(),
         verticalAlignment = Alignment.Vertical.CenterVertically
     ) {
         Spacer(GlanceModifier.defaultWeight())
-        if (state.supportsExtras) {
+        if (showShuffle) {
             CircleIconButton(
                 resId = state.shuffleIcon,
                 contentDescription = context.getString(R.string.widget_action_shuffle),
-                iconTint = if (state.shuffleOn) state.accent else ICON_TINT,
+                iconTint = if (state.shuffleOn) GlanceTheme.colors.primary else GlanceTheme.colors.onSurface,
                 dimension = 28.dp,
                 iconSize = 15.dp,
                 enabled = state.shuffleAvailable,
@@ -295,45 +420,71 @@ private fun Controls(state: WidgetState, context: Context) {
             )
             Spacer(GlanceModifier.defaultWeight())
         }
-        CircleIconButton(
-            resId = R.drawable.ic_skip_prev,
-            contentDescription = context.getString(R.string.notif_action_previous),
-            iconTint = ICON_TINT,
-            dimension = 28.dp,
-            iconSize = 15.dp,
-            action = actionRunCallback<PreviousAction>()
-        )
-        Spacer(GlanceModifier.defaultWeight())
-        CircleIconButton(
-            resId = state.playPauseIcon,
-            contentDescription = context.getString(if (state.playing) R.string.notif_action_pause else R.string.notif_action_play),
-            iconTint = PLAY_ICON_TINT,
-            background = Color(state.accent),
-            dimension = 36.dp,
-            iconSize = 17.dp,
-            action = actionRunCallback<PlayPauseAction>()
-        )
-        Spacer(GlanceModifier.defaultWeight())
-        CircleIconButton(
-            resId = R.drawable.ic_skip_next,
-            contentDescription = context.getString(R.string.notif_action_next),
-            iconTint = ICON_TINT,
-            dimension = 28.dp,
-            iconSize = 15.dp,
-            action = actionRunCallback<NextAction>()
-        )
-        if (state.supportsExtras) {
+        if (showSkip) {
+            CircleIconButton(
+                resId = R.drawable.ic_skip_prev,
+                contentDescription = context.getString(R.string.notif_action_previous),
+                iconTint = GlanceTheme.colors.onSurface,
+                dimension = 28.dp,
+                iconSize = 15.dp,
+                action = actionRunCallback<PreviousAction>()
+            )
             Spacer(GlanceModifier.defaultWeight())
+        }
+        if (showPlay) {
+            CircleIconButton(
+                resId = state.playPauseIcon,
+                contentDescription = context.getString(if (state.playing) R.string.notif_action_pause else R.string.notif_action_play),
+                iconTint = GlanceTheme.colors.onPrimary,
+                background = GlanceTheme.colors.primary,
+                dimension = 36.dp,
+                iconSize = 17.dp,
+                action = actionRunCallback<PlayPauseAction>()
+            )
+            Spacer(GlanceModifier.defaultWeight())
+        }
+        if (showSkip) {
+            CircleIconButton(
+                resId = R.drawable.ic_skip_next,
+                contentDescription = context.getString(R.string.notif_action_next),
+                iconTint = GlanceTheme.colors.onSurface,
+                dimension = 28.dp,
+                iconSize = 15.dp,
+                action = actionRunCallback<NextAction>()
+            )
+            Spacer(GlanceModifier.defaultWeight())
+        }
+        if (showRepeat) {
             CircleIconButton(
                 resId = state.repeatIcon,
                 contentDescription = context.getString(R.string.widget_action_repeat),
-                iconTint = if (state.repeatOn) state.accent else ICON_TINT,
+                iconTint = if (state.repeatOn) GlanceTheme.colors.primary else GlanceTheme.colors.onSurface,
                 dimension = 28.dp,
                 iconSize = 15.dp,
                 action = actionRunCallback<RepeatAction>()
             )
+            Spacer(GlanceModifier.defaultWeight())
         }
-        Spacer(GlanceModifier.defaultWeight())
+    }
+}
+
+@Composable
+private fun OfflineBadge() {
+    Box(
+        modifier = GlanceModifier
+            .background(withAlpha(GlanceTheme.colors.onSurface, WIDGET_BUTTON_ALPHA))
+            .cornerRadius(11.dp)
+            .padding(horizontal = 8.dp, vertical = 3.dp)
+    ) {
+        Text(
+            text = LocalContext.current.getString(R.string.widget_badge_offline),
+            maxLines = 1,
+            style = TextStyle(
+                color = GlanceTheme.colors.onSurfaceVariant,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Medium
+            )
+        )
     }
 }
 
@@ -341,16 +492,17 @@ private fun Controls(state: WidgetState, context: Context) {
 private fun CircleIconButton(
     resId: Int,
     contentDescription: String,
-    iconTint: Int,
+    iconTint: ColorProvider,
     dimension: Dp,
     iconSize: Dp,
     action: Action,
-    background: Color = BUTTON_SURFACE,
+    background: ColorProvider? = null,
     enabled: Boolean = true
 ) {
+    val fill = background ?: withAlpha(GlanceTheme.colors.onSurface, WIDGET_BUTTON_ALPHA)
     val base = GlanceModifier
         .size(dimension)
-        .background(ColorProvider(background))
+        .background(fill)
         .cornerRadius(dimension / 2)
     val modifier = if (enabled) base.clickable(action) else base
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
@@ -358,7 +510,9 @@ private fun CircleIconButton(
             provider = ImageProvider(resId),
             contentDescription = contentDescription,
             modifier = GlanceModifier.size(iconSize),
-            colorFilter = tint(if (enabled) iconTint else ICON_DISABLED_TINT)
+            colorFilter = tint(
+                if (enabled) iconTint else withAlpha(GlanceTheme.colors.onSurface, WIDGET_DISABLED_ALPHA)
+            )
         )
     }
 }

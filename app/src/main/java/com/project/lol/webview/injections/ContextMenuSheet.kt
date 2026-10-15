@@ -10,19 +10,161 @@ object ContextMenuSheet {
             var HEAD_CLS = 'spl-sheet-head';
             var S = '[data-tippy-root]:has(ul[role="menu"])';
             var LIKE = S + ' ul[role="menu"] button.spl-sheet-like';
+            var GRACE_MS = 600;
+            var TRIGGER_MAX_AGE = 2500;
+            var DISMISS_BLOCK_MS = 1200;
             var menuObserver = null;
             var menuTarget = null;
             var activeTrigger = null;
             var lastTrigger = null;
             var timer = null;
             var sheetOpen = false;
+            var ensureTries = 0;
 
-            function rememberTrigger(e){
+            var menuMutAt = 0;
+            var pressAt = 0;
+            var pressInMenu = false;
+            var pressDismissed = false;
+
+            function visibleEl(el){
+                if (!el || !el.isConnected) return false;
+                try {
+                    var r = el.getBoundingClientRect();
+                    if (r.width < 2 || r.height < 2) return false;
+                    var node = el, hops = 0;
+                    while (node && node !== document.body && hops++ < 8){
+                        var cs = getComputedStyle(node);
+                        if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+                        if (parseFloat(cs.opacity) < 0.02) return false;
+                        node = node.parentElement;
+                    }
+                    return true;
+                } catch(e){ return false; }
+            }
+            function liveMenuBox(){
+                var boxes = document.querySelectorAll('#context-menu');
+                var live = null;
+                for (var i = 0; i < boxes.length; i++){
+                    if (visibleEl(boxes[i])) live = boxes[i];
+                }
+                if (live) return live;
+                return boxes.length ? boxes[boxes.length - 1] : null;
+            }
+            function visibleMenuCount(){
+                var uls = document.querySelectorAll('ul[role="menu"][data-depth="0"]');
+                var n = 0;
+                for (var i = 0; i < uls.length; i++){
+                    if (visibleEl(uls[i])) n++;
+                }
+                return n;
+            }
+
+            function menuRootOf(el){
+                if (!el || !el.closest) return null;
+                return el.closest('[data-tippy-root], [role="menu"], #context-menu');
+            }
+
+            function resolveTrigger(){
+                var ul = openMenu();
+                if (ul && ul.closest){
+                    try{
+                        var root = ul.closest('[data-tippy-root]');
+                        if (root && root.id){
+                            var byId = document.querySelector('[aria-describedby="' + root.id + '"]');
+                            if (byId) return byId;
+                        }
+                    }catch(e){}
+                }
+                try{
+                    var open = document.querySelector('[data-context-menu-open="true"]');
+                    if (open) return open;
+                }catch(e){}
+                if (lastTrigger && menuMutAt > pressAt && (Date.now() - pressAt) < TRIGGER_MAX_AGE){
+                    return lastTrigger;
+                }
+                return null;
+            }
+
+            function dismissOutside(){
+                var m = openMenu();
+                if (!m) { notify(false); return; }
+                try{
+                    m.dispatchEvent(new KeyboardEvent('keydown', {
+                        key:'Escape', code:'Escape', keyCode:27, which:27,
+                        bubbles:true, cancelable:true
+                    }));
+                }catch(e){}
+                setTimeout(function(){
+                    var still = openMenu();
+                    if (still && visibleEl(still)){
+                        var root = null;
+                        try{ root = still.closest('[data-tippy-root]') || still.parentElement; }catch(e){}
+                        if (root && root.parentElement) root.remove();
+                    }
+                    notify(false);
+                }, 180);
+            }
+            function maybeDismissOutside(target){
+                var m = openMenu();
+                if (!m || !visibleEl(m)) return;
+                var trig = null;
+                try{ trig = resolveTrigger(); }catch(e){}
+                if (trig && target && trig.contains && trig.contains(target)) return;
+                try{
+                    if (target && target.closest && target.closest('[data-context-menu-open="true"]')) return;
+                }catch(e){}
+                pressDismissed = true;
+                dismissOutside();
+            }
+
+            function pressBeganInOpenMenu(){
+                return pressInMenu && pressAt >= menuMutAt;
+            }
+            function gateBlock(target){
+                if (pressDismissed && (Date.now() - pressAt) < DISMISS_BLOCK_MS) return true;
+                if (!target || !target.closest) return false;
+                var root = menuRootOf(target);
+                if (root){
+                    if (pressBeganInOpenMenu()) return false;
+                    return (Date.now() - menuMutAt) < GRACE_MS;
+                }
+                try{
+                    var tr = target.closest('[data-context-menu-open="true"]');
+                    if (tr) return pressAt < menuMutAt && (Date.now() - menuMutAt) < GRACE_MS;
+                }catch(e){}
+                return false;
+            }
+
+            document.addEventListener('pointerdown', function(e){
+                if (!e.isTrusted) return;
+                pressAt = Date.now();
+                pressInMenu = !!menuRootOf(e.target);
+                pressDismissed = false;
+                if (!pressInMenu) maybeDismissOutside(e.target);
                 var t = e.target;
                 if (!t || !t.closest) return;
                 if (t.closest('[data-tippy-root]')) return;
                 lastTrigger = t.closest('button') || t;
-            }
+            }, true);
+
+            ['mousedown','mouseup','click'].forEach(function(type){
+                document.addEventListener(type, function(e){
+                    if (!e.isTrusted) return;
+                    if (!gateBlock(e.target)) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    if (e.type === 'click') pressDismissed = false;
+                }, true);
+            });
+
+            document.addEventListener('mouseover', function(e){
+                if (!e.isTrusted) return;
+                if (pressInMenu) return;
+                if ((Date.now() - menuMutAt) > 450) return;
+                if (!e.target || !e.target.closest) return;
+                if (menuRootOf(e.target)) e.stopPropagation();
+            }, true);
 
             function notify(open){
                 if (open === sheetOpen) return;
@@ -37,12 +179,21 @@ object ContextMenuSheet {
                 s.textContent =
                     S + '{position:fixed!important;inset:auto 0 0 0!important;transform:none!important;width:100%!important;max-width:100%!important;pointer-events:auto!important;z-index:2147483647!important;will-change:auto!important}' +
                     S + ' #context-menu{width:100%!important;max-width:100%!important;max-height:none!important;overflow:visible!important;padding:0!important;background:transparent!important;border-radius:0!important;box-shadow:none!important}' +
-                    S + ' ul[role="menu"]{width:100%!important;max-width:100%!important;min-width:0!important;max-height:55vh!important;overflow-y:auto!important;overflow-x:hidden!important;border-radius:18px 18px 0 0!important;box-shadow:0 -10px 40px rgba(0,0,0,.65)!important;padding:4px 0 calc(14px + env(safe-area-inset-bottom,0px))!important;scrollbar-width:none!important;overscroll-behavior:contain!important}' +
+                    S + ' #context-menu>*{width:100%!important;max-width:100%!important;box-sizing:border-box!important}' +
+                    S + ' ul[role="menu"]{width:100%!important;max-width:100%!important;min-width:0!important;max-height:55vh!important;overflow-y:auto!important;overflow-x:hidden!important;touch-action:pan-y!important;border-radius:18px 18px 0 0!important;box-shadow:0 -10px 40px rgba(0,0,0,.65)!important;padding:4px 0 calc(14px + env(safe-area-inset-bottom,0px))!important;scrollbar-width:none!important;overscroll-behavior:contain!important}' +
                     S + ' ul[role="menu"]::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}' +
                     S + ' ul[role="menu"]::before{content:"";display:block;position:sticky;top:0;z-index:2;width:36px;height:4px;border-radius:2px;background:rgba(255,255,255,.28);margin:8px auto 6px}' +
+                    S + ' ul[role="menu"]:has(> .' + HEAD_CLS + ')::before{display:none!important}' +
                     S + ' ul[role="menu"] button{padding:12px 16px!important;min-height:48px!important}' +
-                    S + ' > ul[role="menu"]{min-height:55vh!important}' +
-                    '.' + HEAD_CLS + '{display:flex;align-items:center;gap:12px;padding:0 16px 12px;margin-bottom:4px;border-bottom:1px solid rgba(255,255,255,.1)}' +
+                    S + ' ul[role="menu"]:has(> .' + HEAD_CLS + '){min-height:55vh!important}' +
+                    S + ' [data-testid="user-widget-menu"]{width:100%!important;max-width:100%!important}' +
+                    S + ' [data-testid="user-widget-menu"]>*{width:100%!important;max-width:100%!important;box-sizing:border-box!important}' +
+                    S + ' [data-testid="user-widget-menu"] ul{width:100%!important;max-width:100%!important}' +
+                    S + ' [data-testid="user-widget-menu"] *{max-width:100%!important}' +
+                    '.' + HEAD_CLS + '{display:flex;flex-direction:column;padding:0 16px 14px;margin-bottom:4px;border-bottom:1px solid rgba(255,255,255,.1);touch-action:none!important;cursor:grab}' +
+                    '.spl-sheet-grab{display:flex;align-items:center;justify-content:center;height:34px;margin:0 -16px 10px;flex-shrink:0;touch-action:none!important}' +
+                    '.spl-sheet-grab span{width:44px;height:5px;border-radius:3px;background:rgba(255,255,255,.35)}' +
+                    '.spl-sheet-main{display:flex;align-items:center;gap:12px;min-height:56px}' +
                     '.spl-sheet-cover{width:48px;height:48px;border-radius:6px;object-fit:cover;flex-shrink:0;background:rgba(255,255,255,.08)}' +
                     '.spl-sheet-meta{flex:1;min-width:0}' +
                     '.spl-sheet-title{font-size:15px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}' +
@@ -56,7 +207,7 @@ object ContextMenuSheet {
                 (document.head || document.documentElement).appendChild(s);
             }
 
-            function menuEl(){ return document.getElementById('context-menu'); }
+            function menuEl(){ return liveMenuBox(); }
             function sheetUl(){
                 var cm = menuEl();
                 if (!cm) return null;
@@ -64,6 +215,11 @@ object ContextMenuSheet {
             }
             function openMenu(){
                 var subs = document.querySelectorAll('ul[role="menu"][data-depth="0"]');
+                var live = null;
+                for (var i = 0; i < subs.length; i++){
+                    if (visibleEl(subs[i])) live = subs[i];
+                }
+                if (live) return live;
                 if (subs.length) return subs[subs.length - 1];
                 var all = document.querySelectorAll('ul[role="menu"]');
                 return all.length ? all[all.length - 1] : null;
@@ -74,24 +230,19 @@ object ContextMenuSheet {
                 if (ul && ul.scrollHeight > ul.clientHeight + 1) return ul;
                 return panel.scrollHeight > panel.clientHeight + 1 ? panel : null;
             }
-            function stampSubmenus(){
-                var subs = document.querySelectorAll('ul[role="menu"][data-depth="1"]');
-                for (var i = 0; i < subs.length; i++) {
-                    if (!subs[i].__splSeen) subs[i].__splSeen = Date.now();
-                }
-            }
-            function triggerEl(){
-                return document.querySelector('[data-context-menu-open="true"]');
-            }
+
             function trackRow(){
-                var t = triggerEl();
-                if (!t) return null;
-                return t.closest('[data-testid="tracklist-row"]') || t.closest('[role="row"]');
+                var t = resolveTrigger();
+                if (!t || !t.closest) return null;
+                try{
+                    return t.closest('[data-testid="tracklist-row"]') || t.closest('[role="row"]');
+                }catch(e){ return null; }
             }
             function slotButton(){
                 var row = trackRow();
                 return row ? row.querySelector('button[aria-checked]') : null;
             }
+
             function likeRowButton(){
                 var ul = sheetUl();
                 if (!ul) return null;
@@ -132,7 +283,13 @@ object ContextMenuSheet {
             function buildHead(){
                 var head = document.createElement('div');
                 head.className = HEAD_CLS;
-                head.innerHTML = '<img class="spl-sheet-cover" alt="" aria-hidden="true"><div class="spl-sheet-meta"><div class="spl-sheet-title"></div><div class="spl-sheet-artist"></div></div><button class="spl-sheet-like" type="button" aria-label="Like"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.7 3.9 12.6a5.1 5.1 0 0 1 7.2-7.2l.9.9.9-.9a5.1 5.1 0 0 1 7.2 7.2z"/></svg></button>';
+                head.innerHTML =
+                    '<div class="spl-sheet-grab"><span></span></div>' +
+                    '<div class="spl-sheet-main">' +
+                    '<img class="spl-sheet-cover" alt="" aria-hidden="true">' +
+                    '<div class="spl-sheet-meta"><div class="spl-sheet-title"></div><div class="spl-sheet-artist"></div></div>' +
+                    '<button class="spl-sheet-like" type="button" aria-label="Like"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.7 3.9 12.6a5.1 5.1 0 0 1 7.2-7.2l.9.9.9-.9a5.1 5.1 0 0 1 7.2 7.2z"/></svg></button>' +
+                    '</div>';
                 head.querySelector('.spl-sheet-like').addEventListener('click', function(ev){
                     ev.preventDefault();
                     ev.stopPropagation();
@@ -147,21 +304,28 @@ object ContextMenuSheet {
                 return head;
             }
             function removeHead(){
-                var head = document.querySelector('.' + HEAD_CLS);
-                if (head) head.remove();
+                var heads = document.querySelectorAll('.' + HEAD_CLS);
+                for (var i = 0; i < heads.length; i++) heads[i].remove();
             }
             function ensure(){
                 var ul = sheetUl();
-                if (!ul && !openMenu()) { removeHead(); activeTrigger = null; notify(false); return; }
+                if (!ul && !openMenu()) { removeHead(); activeTrigger = null; notify(false); ensureTries = 0; return; }
                 notify(true);
-                activeTrigger = triggerEl() || lastTrigger;
+                activeTrigger = resolveTrigger() || lastTrigger;
                 if (!ul) { removeHead(); return; }
                 var d = trackInfo();
-                if (!d) { removeHead(); return; }
+                if (!d) {
+                    removeHead();
+                    if (ensureTries < 8) { ensureTries++; schedule(); }
+                    return;
+                }
+                ensureTries = 0;
                 var head = ul.querySelector('.' + HEAD_CLS);
                 if (head && !head.querySelector('.spl-sheet-like')) { head.remove(); head = null; }
                 if (!head) {
                     head = buildHead();
+                    ul.insertBefore(head, ul.firstChild);
+                } else if (ul.firstElementChild !== head) {
                     ul.insertBefore(head, ul.firstChild);
                 }
                 var cov = head.querySelector('.spl-sheet-cover');
@@ -178,7 +342,7 @@ object ContextMenuSheet {
             }
 
             function closeSheet(){
-                var t = activeTrigger || triggerEl() || lastTrigger;
+                var t = activeTrigger || resolveTrigger() || lastTrigger;
                 if (t && document.contains(t)) { fire(t); return; }
                 notify(false);
             }
@@ -206,22 +370,21 @@ object ContextMenuSheet {
                     }
                 }
 
-                panel.addEventListener('click', function(e){
-                    var t = e.target;
-                    if (!t || !t.closest) return;
-                    var sub = t.closest('ul[role="menu"][data-depth="1"]');
-                    if (!sub || !sub.__splSeen) return;
-                    if (Date.now() - sub.__splSeen > 400) return;
-                    e.preventDefault();
-                    e.stopPropagation();
-                    e.stopImmediatePropagation();
-                }, {capture:true});
-
                 panel.addEventListener('pointerdown', function(e){
+                    if (!e.isTrusted) return;
                     if (e.pointerType === 'mouse' && e.button !== 0) return;
-                    if (document.querySelectorAll('ul[role="menu"]').length > 1) { pid = null; return; }
+                    if (visibleMenuCount() > 1) { pid = null; return; }
+                    if (panel.querySelector('form')) { pid = null; return; }
                     var sc = scrollerOf(panel);
                     if (sc && sc.scrollTop > 0) { pid = null; return; }
+                    var inHead = !!(e.target.closest && e.target.closest('.' + HEAD_CLS));
+                    var inHandle = false;
+                    var ul = panel.querySelector('ul[role="menu"][data-depth="0"]');
+                    if (ul){
+                        var r = ul.getBoundingClientRect();
+                        inHandle = e.clientY >= r.top && (e.clientY - r.top) <= 44;
+                    }
+                    if (sc && !inHead && !inHandle) { pid = null; return; }
                     startY = e.clientY;
                     startX = e.clientX;
                     dy = 0;
@@ -235,7 +398,7 @@ object ContextMenuSheet {
                     var d = e.clientY - startY;
                     var dx = Math.abs(e.clientX - startX);
                     if (!decided) {
-                        if (Math.abs(d) < 6 && dx < 6) return;
+                        if (Math.abs(d) < 10 && dx < 10) return;
                         decided = true;
                         if (d <= 0 || dx > Math.abs(d)) { pid = null; return; }
                         var sc2 = scrollerOf(panel);
@@ -254,10 +417,12 @@ object ContextMenuSheet {
                 function end(e){
                     if (pid === null || (e.pointerId !== undefined && e.pointerId !== pid)) return;
                     var was = dragging;
+                    var cancelled = (e.type === 'pointercancel');
                     pid = null;
                     dragging = false;
                     if (!was) return;
                     try { panel.releasePointerCapture(e.pointerId); } catch(err){}
+                    if (cancelled) { settle(false); return; }
                     settle(dy > Math.min(110, (panel.offsetHeight || 1) * 0.28));
                 }
                 panel.addEventListener('pointerup', end, {capture:true, passive:true});
@@ -266,7 +431,13 @@ object ContextMenuSheet {
 
             function schedule(){
                 if (timer) return;
-                timer = setTimeout(function(){ timer = null; stampSubmenus(); ensure(); watchMenu(); }, 120);
+                timer = setTimeout(function run(){
+                    timer = null;
+                    if (window.__splBg) return;
+                    if (window.__splBusy) { timer = setTimeout(run, 250); return; }
+                    ensure();
+                    watchMenu();
+                }, 120);
             }
             function watchMenu(){
                 var m = openMenu();
@@ -279,15 +450,30 @@ object ContextMenuSheet {
                 if (menuObserver && menuTarget === cm) return;
                 if (menuObserver) menuObserver.disconnect();
                 menuTarget = cm;
-                menuObserver = new MutationObserver(function(){ stampSubmenus(); schedule(); });
+                menuObserver = new MutationObserver(function(){
+                    menuMutAt = Date.now();
+                    schedule();
+                });
                 menuObserver.observe(cm, {childList: true, subtree: true});
             }
 
             window.__splCloseCtxSheet = closeSheet;
-            document.addEventListener('pointerdown', rememberTrigger, true);
             injectStyle();
             if (window.MutationObserver) {
-                var bodyObserver = new MutationObserver(schedule);
+                var bodyObserver = new MutationObserver(function(muts){
+                    for (var i = 0; i < muts.length; i++) {
+                        var added = muts[i].addedNodes;
+                        for (var j = 0; j < added.length; j++) {
+                            var n = added[j];
+                            if (n.nodeType !== 1) continue;
+                            if ((n.matches && n.matches('[data-tippy-root]')) ||
+                                (n.querySelector && n.querySelector('ul[role="menu"], #context-menu'))) {
+                                menuMutAt = Date.now();
+                            }
+                        }
+                    }
+                    schedule();
+                });
                 bodyObserver.observe(document.body, {childList: true});
             }
             ensure();

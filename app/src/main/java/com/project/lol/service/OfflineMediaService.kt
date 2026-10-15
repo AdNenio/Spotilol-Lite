@@ -26,11 +26,9 @@ import androidx.media.session.MediaButtonReceiver
 import com.project.lol.R
 import com.project.lol.ui.OfflineActivity
 import com.project.lol.util.Logger
-import com.project.lol.ui.theme.ThemeController
 import com.project.lol.widget.WidgetSource
 import com.project.lol.widget.WidgetState
 import com.project.lol.widget.WidgetUpdater
-import androidx.core.graphics.toColorInt
 import com.project.lol.util.AppLocale
 import java.io.File
 import kotlin.math.min
@@ -215,10 +213,6 @@ class OfflineMediaService : Service() {
 
     private fun setupMediaSession() {
         mediaSession = MediaSessionCompat(this, "SpotilolOfflineSession").apply {
-            setFlags(
-                MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or
-                    MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS
-            )
             setCallback(object : MediaSessionCompat.Callback() {
                 override fun onPlayFromSearch(query: String?, extras: Bundle?) {
                     OfflineMediaService.controller?.onPlayFromSearch(query)
@@ -309,10 +303,6 @@ class OfflineMediaService : Service() {
         pushWidgetState()
     }
 
-    private fun widgetAccent(): Int = runCatching {
-        ThemeController.accentHex(this).toColorInt()
-    }.getOrDefault(NOTIF_COLOR)
-
     private fun pushWidgetState(force: Boolean = false) {
         val now = System.currentTimeMillis()
         if (!force && now - lastWidgetPushAt < 2000L) return
@@ -327,7 +317,6 @@ class OfflineMediaService : Service() {
             repeat = "false",
             position = currentPosition,
             duration = currentDuration,
-            accent = widgetAccent(),
             source = WidgetState.SOURCE_OFFLINE,
             cover = coverBitmap
         )

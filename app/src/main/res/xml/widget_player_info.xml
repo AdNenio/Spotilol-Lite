@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
+    android:configure="com.project.lol.widget.WidgetStudioActivity"
     android:description="@string/widget_player_description"
     android:initialLayout="@layout/widget_player_initial"
     android:minHeight="48dp"
     android:minResizeHeight="40dp"
-    android:minResizeWidth="120dp"
+    android:minResizeWidth="110dp"
     android:minWidth="180dp"
     android:previewLayout="@layout/widget_player_initial"
     android:resizeMode="horizontal|vertical"
@@ -13,4 +14,5 @@
     android:targetCellWidth="4"
     android:updatePeriodMillis="0"
     android:widgetCategory="home_screen"
+    android:widgetFeatures="reconfigurable"
     tools:targetApi="31" />

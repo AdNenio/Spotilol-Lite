@@ -9,6 +9,7 @@ object AutoFeatures {
                 }
                 if(afint) clearInterval(afint);
                 afint = setInterval(function(){
+                    if(window.__splBg || window.__splBusy) return;
                     if(window.closeNpPref) closeNowPlay();
                     var ft = document.querySelector('aside div.encore-bright-accent-set button');
                     var splRemote = (typeof window.__splRemoteActive === 'function') && window.__splRemoteActive();

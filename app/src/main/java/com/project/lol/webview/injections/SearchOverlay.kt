@@ -50,6 +50,16 @@ object SearchOverlay {
                     play: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="m7.05 3.606 13.49 7.788a.7.7 0 0 1 0 1.212L7.05 20.394A.7.7 0 0 1 6 19.788V4.212a.7.7 0 0 1 1.05-.606"/></svg>'
                 };
 
+                var RES_CACHE = {};
+                function cachePut(q, items){
+                    RES_CACHE[q] = { items: items, t: Date.now() };
+                    var ks = Object.keys(RES_CACHE);
+                    if (ks.length > 12) {
+                        ks.sort(function(a,b){ return RES_CACHE[a].t - RES_CACHE[b].t; });
+                        for (var i = 0; i < ks.length - 12; i++) delete RES_CACHE[ks[i]];
+                    }
+                }
+
                 function iconFor(kind){ return ICONS[kind] || ICONS.search; }
 
                 function pickImg(sources){
@@ -519,6 +529,7 @@ object SearchOverlay {
                         for(var i=0;i<items.length;i++){
                             if(items[i] && items[i].item) flat.push(items[i].item);
                         }
+                        cachePut(q, flat);
                         renderResults(flat);
                     }).catch(function(){});
                     window.__splOwnCall=false;
@@ -533,11 +544,17 @@ object SearchOverlay {
                         doRecent();
                         return;
                     }
-                    renderLoading();
                     if(v === lastQ) return;
                     lastQ = v;
                     clearTimeout(debTimer);
-                    debTimer = setTimeout(function(){ doSearch(v); }, 220);
+                    debTimer = setTimeout(function(){
+                        var hit = RES_CACHE[v];
+                        if (hit) renderResults(hit.items);
+                        if (!hit || (Date.now() - hit.t) > 30000) {
+                            if (!hit) renderLoading();
+                            doSearch(v);
+                        }
+                    }, 220);
                 }
 
                 function buildPanel(){

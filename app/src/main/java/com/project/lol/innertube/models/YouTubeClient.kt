@@ -254,5 +254,25 @@ data class YouTubeClient(
             useSignatureTimestamp = false,
             packageName = "com.google.ios.youtube"
         )
+
+        /**
+         * Only used to browse the Lyrics tab. The WEB_REMIX client returns the lyrics as plain
+         * text, while this one returns `timedLyricsModel` with per-line millisecond cues.
+         *
+         * Unofficial, so callers must keep a WEB_REMIX fallback for when it stops answering.
+         * No login: lyrics are public data and the account must not be attached to the request.
+         */
+        val ANDROID_MUSIC = YouTubeClient(
+            clientName = "ANDROID_MUSIC",
+            clientVersion = "7.27.52",
+            clientId = "21",
+            userAgent = "com.google.android.apps.youtube.music/7.27.52 (Linux; U; Android 14) gzip",
+            osName = "Android",
+            osVersion = "14",
+            androidSdkVersion = "34",
+            friendlyName = "Android Music",
+            loginSupported = false,
+            useSignatureTimestamp = false
+        )
     }
 }

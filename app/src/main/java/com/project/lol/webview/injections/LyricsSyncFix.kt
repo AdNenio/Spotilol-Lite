@@ -173,6 +173,7 @@ object LyricsSyncFix {
                 if (dirty && !obsPending){
                     obsPending = true;
                     setTimeout(function(){
+                        if (window.__splBg || window.__splBusy) { obsPending = false; return; }
                         obsPending = false;
                         rebalance();
                     }, OBS_DEBOUNCE_MS);

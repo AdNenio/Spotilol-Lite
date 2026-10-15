@@ -18,11 +18,12 @@ object Tags {
         trackNumber: Int? = null,
         discNumber: Int? = null,
         year: Int? = null,
+        lyrics: String? = null,
     ) {
         runCatching {
             when (format) {
-                DownloadFormat.M4A -> writeMp4Tags(file, title, artist, album, coverFile, trackNumber, discNumber, year)
-                DownloadFormat.MP3 -> writeMp3Tags(file, title, artist, album, coverFile, trackNumber, discNumber, year)
+                DownloadFormat.M4A -> writeMp4Tags(file, title, artist, album, coverFile, trackNumber, discNumber, year, lyrics)
+                DownloadFormat.MP3 -> writeMp3Tags(file, title, artist, album, coverFile, trackNumber, discNumber, year, lyrics)
             }
         }.onFailure {
             Logger.w(TAG, "writeTags: failed for ${file.name}: ${it.message}")
@@ -38,9 +39,10 @@ object Tags {
         trackNumber: Int?,
         discNumber: Int?,
         year: Int?,
+        lyrics: String?,
     ) {
         val cover = readCoverBytes(coverFile)
-        if (Mp4Tags.writeTags(file, title, artist, album, cover, trackNumber, discNumber, year)) return
+        if (Mp4Tags.writeTags(file, title, artist, album, cover, trackNumber, discNumber, year, lyrics)) return
         Logger.w(TAG, "writeMp4Tags: tag write failed for ${file.name}")
     }
 
@@ -53,8 +55,9 @@ object Tags {
         trackNumber: Int?,
         discNumber: Int?,
         year: Int?,
+        lyrics: String?,
     ) {
-        if (Id3Tags.writeTags(file, title, artist, album, readCoverBytes(coverFile), trackNumber, discNumber, year)) return
+        if (Id3Tags.writeTags(file, title, artist, album, readCoverBytes(coverFile), trackNumber, discNumber, year, lyrics)) return
         Logger.w(TAG, "writeMp3Tags: tag write failed for ${file.name}")
     }
 

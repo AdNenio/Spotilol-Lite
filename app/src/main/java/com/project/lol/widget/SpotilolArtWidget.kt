@@ -3,13 +3,13 @@ package com.project.lol.widget
 import android.appwidget.AppWidgetManager
 import android.content.Context
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.datastore.preferences.core.Preferences
 import androidx.glance.ColorFilter
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
+import androidx.glance.GlanceTheme
 import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.LocalContext
@@ -35,23 +35,22 @@ import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
-import androidx.glance.unit.ColorProvider
 import com.project.lol.R
 import com.project.lol.ui.MainActivity
 import com.project.lol.ui.OfflineActivity
 
-private val ART_FALLBACK = Color(0xFF101010)
-private val PILL_BACKGROUND = Color(0xCC000000)
-private val PILL_TEXT = Color(0xFFFFFFFF)
-private val FLOATING_BACKGROUND = Color(0xB3000000)
+private const val FLOATING_ALPHA = 0.70f
 
 class SpotilolArtWidget : GlanceAppWidget() {
 
     override val sizeMode: SizeMode = SizeMode.Exact
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
+        val providers = WidgetTheme.colorProviders(context)
         provideContent {
-            ArtContent()
+            GlanceTheme(colors = providers) {
+                ArtContent()
+            }
         }
     }
 }
@@ -85,7 +84,7 @@ private fun ArtContent() {
     } else {
         GlanceModifier
             .fillMaxSize()
-            .background(ColorProvider(ART_FALLBACK))
+            .background(GlanceTheme.colors.surface)
             .cornerRadius(16.dp)
             .clickable(open)
     }
@@ -102,7 +101,7 @@ private fun ArtContent() {
                 Box(
                     modifier = GlanceModifier
                         .size(40.dp)
-                        .background(ColorProvider(FLOATING_BACKGROUND))
+                        .background(withAlpha(GlanceTheme.colors.surface, FLOATING_ALPHA))
                         .cornerRadius(12.dp)
                         .clickable(actionRunCallback<PlayPauseAction>()),
                     contentAlignment = Alignment.Center
@@ -111,13 +110,13 @@ private fun ArtContent() {
                         provider = ImageProvider(state.playPauseIcon),
                         contentDescription = context.getString(if (state.playing) R.string.notif_action_pause else R.string.notif_action_play),
                         modifier = GlanceModifier.size(16.dp),
-                        colorFilter = ColorFilter.tint(ColorProvider(PILL_TEXT))
+                        colorFilter = ColorFilter.tint(GlanceTheme.colors.onSurface)
                     )
                 }
                 Spacer(GlanceModifier.width(8.dp))
                 Box(
                     modifier = GlanceModifier
-                        .background(ColorProvider(PILL_BACKGROUND))
+                        .background(withAlpha(GlanceTheme.colors.surface, WIDGET_SCRIM_ALPHA))
                         .cornerRadius(20.dp)
                         .padding(horizontal = 10.dp, vertical = 6.dp)
                 ) {
@@ -125,7 +124,7 @@ private fun ArtContent() {
                         text = state.title,
                         maxLines = 1,
                         style = TextStyle(
-                            color = ColorProvider(PILL_TEXT),
+                            color = GlanceTheme.colors.onSurface,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Medium
                         )
@@ -136,7 +135,7 @@ private fun ArtContent() {
             Text(
                 text = context.getString(R.string.widget_empty_subtitle),
                 maxLines = 1,
-                style = TextStyle(color = ColorProvider(Color(0xFF9A9AA0)), fontSize = 12.sp)
+                style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 12.sp)
             )
         }
     }

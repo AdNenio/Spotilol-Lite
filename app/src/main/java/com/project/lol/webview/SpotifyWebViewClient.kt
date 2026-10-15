@@ -33,6 +33,7 @@ class SpotifyWebViewClient(
     private val onWebViewError: ((errorCode: Int, description: String) -> Unit)? = null
 ) : WebViewClient() {
 
+    private val mainHandler = Handler(Looper.getMainLooper())
     private var currentWebView: WebView? = null
     private var prefsListener: android.content.SharedPreferences.OnSharedPreferenceChangeListener? = null
     private var boundPrefs: android.content.SharedPreferences? = null
@@ -41,6 +42,27 @@ class SpotifyWebViewClient(
     private var docStartJs: String? = null
     private var docStartView: WebView? = null
     private var docStartJustRegistered = false
+
+    private var pendingPlayerInjection: Runnable? = null
+    private var lastInjectedToken = -1L
+
+    private fun cancelPendingPlayerInjection() {
+        pendingPlayerInjection?.let { mainHandler.removeCallbacks(it) }
+        pendingPlayerInjection = null
+    }
+
+    fun dispose() {
+        NavToken.bump()
+        cancelPendingPlayerInjection()
+        prefsListener?.let { boundPrefs?.unregisterOnSharedPreferenceChangeListener(it) }
+        prefsListener = null
+        boundPrefs = null
+        currentWebView = null
+        runCatching { docStartHandler?.remove() }
+        docStartHandler = null
+        docStartView = null
+        docStartJs = null
+    }
 
     override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
         super.doUpdateVisitedHistory(view, url, isReload)
@@ -53,6 +75,7 @@ class SpotifyWebViewClient(
         super.onPageFinished(view, url)
         if (view == null || url == null) return
 
+        val token = NavToken.current()
         val elapsed = if (pageStartedAt > 0) System.currentTimeMillis() - pageStartedAt else -1
         pageStartedAt = 0
         currentWebView = view
@@ -61,13 +84,13 @@ class SpotifyWebViewClient(
 
         if (url.startsWith("https://www.facebook.com/privacy/consent/gdp/")) {
             Logger.s(TAG, "route: facebook gdpr bypass")
-            onPageFinishedClean(view, FbGdprBypass.CONTENT)
+            view.evaluateJavascript(FbGdprBypass.CONTENT, null)
             return
         }
 
         if (isLoginPageUrl(url)) {
             Logger.s(TAG, "route: classic login button")
-            onPageFinishedClean(view, ClassicLoginButton.CONTENT)
+            view.evaluateJavascript(ClassicLoginButton.CONTENT, null)
         }
 
         val loggedIn = view.context.getSharedPreferences("spotilol_prefs", 0)
@@ -75,17 +98,17 @@ class SpotifyWebViewClient(
 
         if (!loggedIn) {
             Logger.i(TAG, "not logged in, arming login detection")
-            onPageFinishedClean(view, LoginDetection.CONTENT)
+            view.evaluateJavascript(LoginDetection.CONTENT, null)
             return
         }
 
-        Logger.s(TAG, "logged in, injecting player control in 500ms")
-
-        Handler(Looper.getMainLooper()).postDelayed({
-            injectPlayerControl(view)
-        }, 500)
+        if (isWebPlayerUrl(url)) {
+            Logger.s(TAG, "logged in, injecting player control in 500ms")
+            schedulePlayerInjection(view, token)
+        }
 
         view.evaluateJavascript(LogoutCheck.CONTENT) { result ->
+            if (token != NavToken.current()) return@evaluateJavascript
             Logger.d(TAG, "logout check: $result")
             if (result == "\"out\"") {
                 Logger.w(TAG, "session expired, back to login")
@@ -96,8 +119,38 @@ class SpotifyWebViewClient(
         }
     }
 
+    private fun schedulePlayerInjection(view: WebView, token: Long) {
+        cancelPendingPlayerInjection()
+        val task = Runnable {
+            pendingPlayerInjection = null
+            if (token != NavToken.current()) {
+                Logger.d(TAG, "player inject skipped: stale nav token")
+                return@Runnable
+            }
+            if (lastInjectedToken == token) {
+                Logger.d(TAG, "player inject skipped: already injected for this token")
+                return@Runnable
+            }
+            if (currentWebView !== view) {
+                Logger.d(TAG, "player inject skipped: webview instance changed")
+                return@Runnable
+            }
+            val currentUrl = view.url
+            if (!isWebPlayerUrl(currentUrl)) {
+                Logger.w(TAG, "player inject skipped: left player origin (${currentUrl?.take(100) ?: "null"})")
+                return@Runnable
+            }
+            lastInjectedToken = token
+            injectPlayerControl(view)
+        }
+        pendingPlayerInjection = task
+        mainHandler.postDelayed(task, 500)
+    }
+
     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
         super.onPageStarted(view, url, favicon)
+        cancelPendingPlayerInjection()
+        NavToken.bump()
         pageStartedAt = System.currentTimeMillis()
         val prefs = view?.context?.getSharedPreferences("spotilol_prefs", 0)
 
@@ -152,13 +205,20 @@ class SpotifyWebViewClient(
         val hideEmptyPlayer = prefs.getBoolean("HideEmptyPlayer", false)
         val playlistSort = prefs.getBoolean("PlaylistSortEnabled", true)
         val showScrollbar = prefs.getBoolean("ShowScrollbar", true)
+        val hideTopBar = prefs.getBoolean("HideTopBar", false)
         // Each payload runs in its own try/catch, matching the old behaviour where each
         // was a separate evaluateJavascript call and one failure didn't stop the rest.
         val parts = buildList {
             add("window.__splShowScrollbar=$showScrollbar;")
+            add("window.__splHideTopBar=$hideTopBar;")
             add("window.__splPowerSavePref=$powerSave;")
             add("window.__splHideEmpty=$hideEmptyPlayer;")
             add("window.__splPlaylistSortEnabled=$playlistSort;")
+            add("""
+                window.addEventListener('pageshow', function(e){
+                    if (e.persisted) { try { location.reload(); } catch(err) {} }
+                });
+            """)
             add(if (isGoogle) GoogleSpoof.CONTENT else BrowserSpoof.CONTENT)
             add(FetchOverride.CONTENT)
             add(AdStateHook.CONTENT)
@@ -169,7 +229,12 @@ class SpotifyWebViewClient(
             add(VideoPark.CONTENT)
             add(NavDuck.CONTENT)
         }
-        return parts.joinToString("\n") { "try{\n$it\n}catch(e){}" }
+
+        val body = parts.joinToString("\n") { "try{\n$it\n}catch(e){}" }
+        val version = body.hashCode()
+        return "(function(){var v=$version;" +
+                "if(window.__splEarlyJsVer===v)return;" +
+                "window.__splEarlyJsVer=v;\n$body\n})();"
     }
 
     private fun isWebPlayerUrl(url: String?): Boolean =
@@ -177,6 +242,7 @@ class SpotifyWebViewClient(
 
     override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
         Logger.e(TAG, "renderer process gone: crashed=${detail?.didCrash()}")
+        dispose()
         view?.let {
             it.stopLoading()
             it.destroy()
@@ -236,6 +302,11 @@ class SpotifyWebViewClient(
         handler?.cancel()
     }
 
+    private fun postToLiveView(view: WebView, block: () -> Unit) {
+        val token = NavToken.current()
+        view.post { if (token == NavToken.current()) block() }
+    }
+
     override fun shouldInterceptRequest(
         view: WebView,
         request: WebResourceRequest
@@ -264,7 +335,7 @@ class SpotifyWebViewClient(
         }
 
         if (AdIdStore.matches(url)) {
-            view.post { view.evaluateJavascript("AndBridge.deferMessage('adblock')", null) }
+            postToLiveView(view) { view.evaluateJavascript("AndBridge.deferMessage('adblock')", null) }
             val silent = view.context.assets?.open("silent.mp3") ?: return null
             return WebResourceResponse("audio/mpeg", null, silent)
         }
@@ -312,7 +383,7 @@ class SpotifyWebViewClient(
                     !url.contains("podz-content") && !url.contains("gew4-spclient") &&
                     isAdAudioUrl(url)
                 ) {
-                    view.post { view.evaluateJavascript("AndBridge.deferMessage('adblock')", null) }
+                    postToLiveView(view) { view.evaluateJavascript("AndBridge.deferMessage('adblock')", null) }
                     val silent = view.context.assets?.open("silent.mp3") ?: return null
                     return WebResourceResponse("audio/mpeg", null, silent)
                 }
@@ -321,6 +392,13 @@ class SpotifyWebViewClient(
             }
         } catch (_: Exception) {
             return null
+        }
+
+        val adMatch = matchAdCdn(url)
+        if (adMatch != null) {
+            postToLiveView(view) { view.evaluateJavascript("AndBridge.deferMessage('adblock')", null) }
+            val silent = view.context.assets?.open("silent.mp3") ?: return null
+            return WebResourceResponse("audio/mpeg", null, silent)
         }
         return null
     }
@@ -349,25 +427,37 @@ class SpotifyWebViewClient(
         val playlistSortEnabled = prefs.getBoolean("PlaylistSortEnabled", true)
         val spicyLyricsEnabled = prefs.getBoolean("SpicyLyrics", true)
         val showScrollbar = prefs.getBoolean("ShowScrollbar", true)
-        val lyricsStyle = prefs.getString("LyricsStyle", LyricsTheme.DEFAULT_STYLE) ?: LyricsTheme.DEFAULT_STYLE
+        val lyricsStyle = LyricsStyle.from(prefs)
         val webCanvas = prefs.getBoolean("WebCanvas", true)
         val webVideos = prefs.getBoolean("WebVideos", true)
+        val hideTopBar = prefs.getBoolean("HideTopBar", false)
 
         Logger.s(
             TAG,
             "inject: engine=$playerMode autoPlay=$autoPlayMode closeNp=$closeNowPlay amoled=$amoledEnabled " +
                 "logging=$debugOverlay takeControl=$takeControl sort=$playlistSortEnabled " +
-                "spicy=$spicyLyricsEnabled scrollbar=$showScrollbar css=${customCss.length}chars lyrics=$lyricsStyle"
+                "spicy=$spicyLyricsEnabled scrollbar=$showScrollbar css=${customCss.length}chars " +
+                "lyrics=${lyricsStyle.preset}/${lyricsStyle.align}/${lyricsStyle.scale}x${lyricsStyle.spacing}"
         )
 
         val js = buildString {
             append("window.autoPlayMode='$autoPlayMode';\n")
             append("window.closeNpPref=$closeNowPlay;\n")
+            append("""
+                try {
+                    localStorage.setItem(
+                        '31mahftyjruadoavemmv6tbdbkwi:toggleNowPlayingView',
+                        JSON.stringify(Boolean(!window.closeNpPref))
+                    );
+                } catch (e) {}
+                """.trimIndent()
+            )
             append("window.__splTakeControl=$takeControl;\n")
             append("window.__splHideEmpty=$hideEmptyPlayer;\n")
             append("window.__splPlaylistSortEnabled=$playlistSortEnabled;\n")
             append("window.__spicyLyricsEnabled=$spicyLyricsEnabled;\n")
             append("window.__splShowScrollbar=$showScrollbar;\n")
+            append("window.__splHideTopBar=$hideTopBar;\n")
             append("window.__splWebPrefs=[$webCanvas,$webVideos];\n")
             if (debugOverlay) {
                 append(DevLogPrelude.js())
@@ -389,34 +479,24 @@ class SpotifyWebViewClient(
             append(DownloadProgress.CONTENT)
             append(CollectionDownload.CONTENT)
             append(ContextMenuDownload.CONTENT)
-            append("""
-                (function(){
-                    var recAcc=function(){
-                        try{
-                            var uw=document.querySelector('[data-testid="user-widget-link"]');
-                            if(uw){
-                                var txt=(uw.textContent||'').split('\n')[0].trim();
-                                if(txt) AndBridge.recAccountName(txt);
-                            }
-                        }catch(e){}
-                    };
-                    setTimeout(recAcc,5000);
-                    setInterval(recAcc,60000);
-                })();
-            """.trimIndent())
+            append(REC_ACC_JS)
             append(CssHack.CONTENT)
+            append(ScrollbarAutoHide.CONTENT)
             append(ContextMenuSheet.CONTENT)
             append(WatchFeed.CONTENT)
             append(ModalFix.CONTENT)
+            append(NpHeaderFix.CONTENT)
             append(ErrorDialogRestyle.CONTENT)
             append(ToastFix.CONTENT)
             append(LyricsSyncFix.CONTENT)
+            append(LyricsEngine.CONTENT)
             append(QueueAutoClose.CONTENT)
             append(LibraryAutoClose.CONTENT)
             append(PlaylistSort.CONTENT)
             append(ColumnsButton.CONTENT)
             append(SpicyLyrics.CONTENT)
             append(WebPrefs.CONTENT)
+            append(PlaylistLookupSheet.CONTENT)
             if (playerMode == "spotilol" || playerMode == "fullscreen") {
                 append("window.__splFullPlayer=${playerMode == "fullscreen"};\n")
                 append(SpotilolPlayer.CONTENT)
@@ -459,18 +539,29 @@ class SpotifyWebViewClient(
                 }
                 "CloseNowPlay" -> {
                     val closeNp = prefs.getBoolean("CloseNowPlay", false)
-                    wv.evaluateJavascript("window.closeNpPref=$closeNp;", null)
+                    wv.evaluateJavascript("""
+                        window.closeNpPref=$closeNp;
+                        try {
+                            localStorage.setItem(
+                                '31mahftyjruadoavemmv6tbdbkwi:toggleNowPlayingView',
+                                JSON.stringify(Boolean(!window.closeNpPref))
+                            );
+                        } catch (e) {}
+                        """.trimIndent(),
+                        null
+                    )
                 }
                 "APlayMode" -> {
                     val mode = prefs.getString("APlayMode", "disabled") ?: "disabled"
                     wv.evaluateJavascript("window.autoPlayMode='$mode';", null)
                 }
-                "AmoledTheme", "CustomCss", "LyricsStyle" -> {
+                "AmoledTheme", "CustomCss" -> {
                     val js = buildAmoledJs(prefs.getBoolean("AmoledTheme", false)) + ";\n" +
                             buildCustomCssJs(prefs.getString("CustomCss", "") ?: "")
                     wv.evaluateJavascript(js, null)
-                    wv.evaluateJavascript(LyricsTheme.buildLyricsStyleJs(prefs.getString("LyricsStyle", LyricsTheme.DEFAULT_STYLE) ?: LyricsTheme.DEFAULT_STYLE), null)
                 }
+                in LyricsStyle.PREF_KEYS ->
+                    wv.evaluateJavascript(LyricsTheme.buildLyricsStyleJs(LyricsStyle.from(prefs)), null)
                 "ThemePreset", "MaterialYou" ->
                     wv.evaluateJavascript(ThemeController.buildAccentJs(wv.context), null)
                 "TakeControl" -> {
@@ -487,6 +578,10 @@ class SpotifyWebViewClient(
                 "HideEmptyPlayer" -> {
                     val hideEmpty = prefs.getBoolean("HideEmptyPlayer", false)
                     wv.evaluateJavascript("window.__splHideEmpty=$hideEmpty; if(window.splApplyEmpty) window.splApplyEmpty();", null)
+                }
+                "HideTopBar" -> {
+                    val hideTopBar = prefs.getBoolean("HideTopBar", false)
+                    wv.evaluateJavascript("window.__splHideTopBar=$hideTopBar; if(window.splApplyHideTopBar) window.splApplyHideTopBar();", null)
                 }
                 "WebCanvas", "WebVideos" -> {
                     val c = prefs.getBoolean("WebCanvas", true)
@@ -564,7 +659,21 @@ class SpotifyWebViewClient(
             "content-type, client-token, authorization, accept, app-platform, spotify-app-version"
         private const val DESKTOP_UA =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
-
+        private val REC_ACC_JS = """
+            (function(){
+                var recAcc=function(){
+                    try{
+                        var uw=document.querySelector('[data-testid="user-widget-link"]');
+                        if(uw){
+                            var txt=(uw.textContent||'').split('\n')[0].trim();
+                            if(txt) AndBridge.recAccountName(txt);
+                        }
+                    }catch(e){}
+                };
+                setTimeout(recAcc,5000);
+                setInterval(recAcc,60000);
+            })();
+        """.trimIndent()
         private val SW_UNREGISTER_JS = """
             try {
                 if(navigator.serviceWorker){

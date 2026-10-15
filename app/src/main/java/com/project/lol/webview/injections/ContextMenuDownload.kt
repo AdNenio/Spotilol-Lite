@@ -4,33 +4,37 @@ package com.project.lol.webview.injections
  * CREDIT: Spotilol - Context Menu Download
  *
  * Adds a "Download" item to Spotify's track context menu (the "..."
- * button on a tracklist row, or right-click on the row itself).
+ * button on a tracklist row, or right-click / long-press on the row).
  *
- * - The track (id/title/artists/album/cover) is harvested from the row
- *   DOM at menu-open time via capture-phase listeners on contextmenu
- *   and menu-trigger clicks. Non-track menus reset the capture, so a
- *   stale track can never leak into the wrong menu.
- * - Menus that must NEVER receive the item:
- *   1. The profile / user-widget dropdown - it ALSO carries
- *      data-testid="context-menu", so the observer used to inject a
- *      stale-track Download item into it (the wrapper
- *      [data-testid="user-widget-menu"] sits INSIDE the context-menu,
- *      so it's detected with a descendant query, not .closest()).
- *   2. Nested submenus opened from menuitems (Add to playlist,
- *      Share) - their trigger carries aria-expanded, and the capture
- *      is dropped the moment one is clicked.
- * - The item is built by cloning an existing plain menu entry at
- *   runtime, so hashed Encore classes, hover styling and icon sizing
- *   survive Spotify deploys. Only the icon path (the player's download
- *   glyph) and the label text are swapped.
- * - Clicking it hands the payload to AndBridge.downloadTrack - the
- *   exact same pipeline as the player's download button - then closes
- *   the menu with a synthesized Escape keydown (tippy-root detach as
- *   last-resort fallback).
- * - Injection runs from a MutationObserver (menu arriving in the DOM)
- *   plus a mouseover safety net that re-injects if a React re-render
- *   wipes the item mid-session. Visibility filtering skips the stale
- *   hidden context menus tippy leaves lying around in the DOM.
+ * Track resolution (v3): the track is resolved AT INJECTION TIME from
+ * the live menu trigger ([data-context-menu-open="true"] -> closest
+ * tracklist row), NOT from a click-time capture. A pointerdown capture
+ * on tracklist rows and the contextmenu listener remain as fallbacks
+ * (TTL 30s) for menus opened without the trigger attribute.
+ *
+ * Menus that must NEVER receive the item (all structural, none depend
+ * on click-time state):
+ *   1. The profile / user-widget dropdown (inner user-widget-menu).
+ *   2. Curation sheets (Add to playlist): detected via form /
+ *      listRow / curation-sheet-list id.
+ *   3. This menu with an expanded submenu trigger (Add to playlist /
+ *      Share) - scoped to THIS menu only, so stale poppers elsewhere
+ *      can never false-positive the check.
+ *   4. Menus whose live trigger is not a tracklist row (column header
+ *      sort menu, playlist header, user widget, ...).
+ *
+ * Active-menu detection walks the ancestor chain (display/visibility/
+ * opacity) and prefers the NEWEST visible popper, so stale hidden
+ * tippy poppers lingering in the DOM can't steal the injection.
+ *
+ * The item is built by cloning an existing plain menu entry at runtime
+ * (hashed Encore classes survive Spotify deploys) and is inserted
+ * BEFORE the first <li> - i.e. directly UNDER the track-info sheet
+ * head injected by ContextMenuSheet, regardless of injection order.
+ *
+ * Clicking it hands the payload to AndBridge.downloadTrack, then
+ * closes the menu with a synthesized Escape keydown (tippy-root detach
+ * as last-resort fallback).
  */
 
 object ContextMenuDownload {
@@ -40,14 +44,23 @@ object ContextMenuDownload {
             window.__splCtxDlInit = true;
         
             var DL_ICON = 'M8 1a1 1 0 0 1 1 1v6.586l2.293-2.293a1 1 0 1 1 1.414 1.414l-4 4a1 1 0 0 1-1.414 0l-4-4a1 1 0 1 1 1.414-1.414L7 8.586V2a1 1 0 0 1 1-1zM2 13a1 1 0 0 1 1-1h10a1 1 0 1 1 0 2H3a1 1 0 0 1-1-1z';
+            var TRACK_TTL = 30000;
         
             window.__splMenuTrack = null;
+            window.__splMenuTrackAt = 0;
 
             function splUpCover(url){
                 if(!url) return '';
                 return url.replace(/ab67616d0000[0-9a-f]{4}/i, 'ab67616d0000b273');
             }
         
+            function splRowOf(el){
+                if(!el || !el.closest) return null;
+                try{
+                    return el.closest('div[data-testid="tracklist-row"]') || el.closest('[role="row"]');
+                }catch(e){ return null; }
+            }
+
             function splGrabRowTrack(row){
                 if(!row) return null;
                 var link = row.querySelector('a[data-testid="internal-track-link"]') ||
@@ -79,26 +92,50 @@ object ContextMenuDownload {
                 };
             }
         
+            function splMenuVisible(el){
+                try{
+                    var node = el, hops = 0;
+                    while(node && node !== document.body && hops++ < 8){
+                        var cs = getComputedStyle(node);
+                        if(cs.display === 'none' || cs.visibility === 'hidden') return false;
+                        if(parseFloat(cs.opacity) < 0.02) return false;
+                        node = node.parentElement;
+                    }
+                    var r = el.getBoundingClientRect();
+                    return r.width >= 2 && r.height >= 2;
+                }catch(e){ return false; }
+            }
+        
             function splActiveMenu(){
                 var menus = document.querySelectorAll('[data-testid="context-menu"]');
+                var found = null;
                 for(var i=0;i<menus.length;i++){
-                    var el = menus[i];
-                    var r = el.getBoundingClientRect();
-                    if(r.width < 2 || r.height < 2) continue;
-                    var cs;
-                    try{ cs = getComputedStyle(el); }catch(e){ continue; }
-                    if(cs.visibility === 'hidden' || parseFloat(cs.opacity) < 0.02) continue;
-                    return el;
+                    if(!splMenuVisible(menus[i])) continue;
+                    found = menus[i];
                 }
-                return null;
+                return found;
             }
         
             function splIsUserMenu(root){
                 try{
-                    return !!(root && root.querySelector && root.querySelector('[data-testid="user-widget-menu"]'));
+                    return !!(root.querySelector && root.querySelector('[data-testid="user-widget-menu"]'));
                 }catch(e){ return false; }
             }
 
+            function splIsCurationSheet(root, ul){
+                try{
+                    if(ul.id === 'curation-sheet-list') return true;
+                    if(root.querySelector('form')) return true;
+                    if(ul.querySelector('[data-encore-id="listRow"]')) return true;
+                }catch(e){}
+                return false;
+            }
+        
+            function splClearTrack(){
+                window.__splMenuTrack = null;
+                window.__splMenuTrackAt = 0;
+            }
+        
             function splDoMenuDownload(track){
                 if(!track || !track.trackId){
                     try{ AndBridge.deferMessage('Track not ready'); }catch(e){}
@@ -171,7 +208,7 @@ object ContextMenuDownload {
                     svg.appendChild(p);
                 }
         
-                var spans = clone.querySelectorAll('span[data-encore-id]');
+                var spans = clone.querySelectorAll('span[data-encore-id], p[data-encore-id]');
                 if(spans.length){
                     spans[0].textContent = 'Download';
                 } else {
@@ -186,22 +223,35 @@ object ContextMenuDownload {
                     splCloseMenu();
                 }, true);
         
-                ul.insertBefore(clone, ul.firstChild);
+                var ref = null;
+                var kids = ul.children;
+                for(var k=0;k<kids.length;k++){
+                    if(kids[k].tagName === 'LI'){ ref = kids[k]; break; }
+                }
+                if(ref) ul.insertBefore(clone, ref);
+                else ul.appendChild(clone);
                 return true;
             }
         
+            function splLiveTrack(){
+                var trig = null;
+                try{ trig = document.querySelector('[data-context-menu-open="true"]'); }catch(e){}
+                if(!trig) return undefined;
+                var row = splRowOf(trig);
+                if(!row) return null;
+                return splGrabRowTrack(row);
+            }
+        
             function splTryInject(attempt){
-                if(attempt > 25) return;
+                if(attempt > 30) return;
                 if(window.__splBg) return;
-                var t = window.__splMenuTrack;
-                if(!t || !t.trackId) return;
                 var root = splActiveMenu();
                 if(!root){
                     setTimeout(function(){ splTryInject(attempt+1); }, 120);
                     return;
                 }
                 if(splIsUserMenu(root)){
-                    window.__splMenuTrack = null;
+                    splClearTrack();
                     return;
                 }
                 var ul = root.querySelector('ul[role="menu"]');
@@ -210,50 +260,59 @@ object ContextMenuDownload {
                     return;
                 }
                 if(ul.querySelector('.spl-menu-dl')) return;
-                if(!splInjectItem(ul, t)){
+                if(splIsCurationSheet(root, ul)) return;
+                var subOpen = false;
+                try{ subOpen = !!root.querySelector('button[aria-expanded="true"]'); }catch(e){}
+                if(subOpen) return;
+        
+                var track = splLiveTrack();
+                if(track === undefined){
+                    var t = window.__splMenuTrack;
+                    if(t && (Date.now() - window.__splMenuTrackAt) > TRACK_TTL) t = null;
+                    if(!t){
+                        setTimeout(function(){ splTryInject(attempt+1); }, 120);
+                        return;
+                    }
+                    track = t;
+                }
+                if(!track) return;
+        
+                if(!splInjectItem(ul, track)){
                     setTimeout(function(){ splTryInject(attempt+1); }, 120);
                 }
             }
         
-            function splCaptureFromEvent(e){
-                var row = null;
-                try{
-                    if(e.target && e.target.closest){
-                        row = e.target.closest('div[data-testid="tracklist-row"]');
-                    }
-                }catch(err){}
-                window.__splMenuTrack = splGrabRowTrack(row);
-            }
+            document.addEventListener('contextmenu', function(e){
+                var row = splRowOf(e.target);
+                window.__splMenuTrack = row ? splGrabRowTrack(row) : null;
+                window.__splMenuTrackAt = Date.now();
+            }, true);
         
-            document.addEventListener('contextmenu', splCaptureFromEvent, true);
+            document.addEventListener('pointerdown', function(e){
+                if(!e.isTrusted) return;
+                var row = splRowOf(e.target);
+                if(!row) return;
+                var t = splGrabRowTrack(row);
+                if(!t) return;
+                window.__splMenuTrack = t;
+                window.__splMenuTrackAt = Date.now();
+            }, true);
         
             document.addEventListener('click', function(e){
                 var target = e.target;
                 if(!target || !target.closest) return;
-
                 try{
                     if(target.closest('button[data-testid="user-widget-link"], [data-testid="user-widget-menu"]')){
-                        window.__splMenuTrack = null;
+                        splClearTrack();
                         return;
                     }
                 }catch(err){}
-
                 try{
-                    if(target.closest('[data-testid="context-menu"]') &&
-                        target.closest('button[aria-expanded]')){
-                        window.__splMenuTrack = null;
+                    if(target.closest('[data-testid="context-menu"]') && target.closest('button[aria-expanded]')){
+                        splClearTrack();
                         return;
                     }
                 }catch(err){}
-
-                var trig = null;
-                try{
-                    if(e.target && e.target.closest){
-                        trig = e.target.closest('[aria-haspopup="menu"]');
-                    }
-                }catch(err){}
-                if(!trig) return;
-                splCaptureFromEvent(e);
             }, true);
         
             var obsPending = false;

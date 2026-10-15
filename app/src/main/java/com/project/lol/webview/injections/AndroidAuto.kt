@@ -19,21 +19,15 @@ object AndroidAuto {
                 return !!window.spotAuthToken;
             };
 
-window.pendingMediaRequests = window.pendingMediaRequests || new Set();
-            var isFetchingLib = false;
+            window.pendingMediaRequests = window.pendingMediaRequests || new Set();
             var pendingLibPromise = null;
 
-            window.checkMediaLib = async function(force) {
-                if (isFetchingLib && !force) {
-                    if (pendingLibPromise) return pendingLibPromise;
-                    return;
-                }
+            window.checkMediaLib = function(force) {
                 if (pendingLibPromise && !force) return pendingLibPromise;
-                await window.ensureAuthToken();
-                if (!window.spotAuthToken) return;
-                isFetchingLib = true;
-                pendingLibPromise = (async function() {
+                var run = (async function() {
                     try {
+                        await window.ensureAuthToken();
+                        if (!window.spotAuthToken) return;
                         var allItems = await window.fetchAllLibrary();
                         var lib = window.parseLibrary(allItems);
                         ['playlists','albums','artists','podcasts'].forEach(function(k) {
@@ -59,11 +53,11 @@ window.pendingMediaRequests = window.pendingMediaRequests || new Set();
                     } catch (e) {
                         console.error('checkMediaLib error:', e);
                     } finally {
-                        isFetchingLib = false;
-                        pendingLibPromise = null;
+                        if (pendingLibPromise === run) pendingLibPromise = null;
                     }
                 })();
-                return pendingLibPromise;
+                pendingLibPromise = run;
+                return run;
             };
 
             window.likedSongsCache = window.likedSongsCache || null;

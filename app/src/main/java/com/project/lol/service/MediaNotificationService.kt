@@ -62,6 +62,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
+private fun jsString(value: String?): String = org.json.JSONObject.quote(value ?: "")
+
 class MediaNotificationService : MediaBrowserServiceCompat() {
 
     companion object {
@@ -83,6 +85,7 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
         private const val CUSTOM_ACTION_TOGGLE_SHUFFLE = "toggle_shuffle"
         private const val CUSTOM_ACTION_REPEAT = "toggle_repeat"
 
+        private const val WAKE_LOCK_RENEW_MS = 10 * 60 * 1000L
         private val pendingCallbacks =
             ConcurrentHashMap<String, Result<MutableList<MediaBrowserCompat.MediaItem>>>()
         private val pendingSearchCallbacks =
@@ -99,7 +102,7 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
             Logger.i(TAG, "player ready: retrying ${parents.size} pending media loads")
             parents.forEach { parentId ->
                 instance?.wakeAndRun(
-                    "if (typeof window.fetchMediaItems === 'function') window.fetchMediaItems('$parentId');"
+                    "if (typeof window.fetchMediaItems === 'function') window.fetchMediaItems(${jsString(parentId)});"
                 )
             }
         }
@@ -127,6 +130,9 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
 
         @Volatile
         private var taskRemoved = false
+
+        @Volatile
+        private var browserBound = false
 
         @JvmStatic
         fun onMediaItemsLoaded(parentId: String, json: String) {
@@ -399,6 +405,7 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
         super.onCreate()
         instance = this
         appContext = applicationContext
+        taskRemoved = false
 
         try {
             createNotificationChannel()
@@ -406,16 +413,19 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
             Logger.e(TAG, "Failed to create notification channel", e)
         }
 
-        try {
-            ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotificationSafe(), getStartForegroundServiceType())
-        } catch (e: Throwable) {
-            Logger.e(TAG, "Failed to start foreground", e)
-        }
-
+        // Media session first: the very first foreground notification is then a
+        // proper MediaStyle notification carrying the session token, and OEM
+        // media routing / battery logic keys off an active session immediately.
         try {
             setupMediaSession()
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to setup media session", e)
+        }
+
+        try {
+            ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotificationSafe(), getStartForegroundServiceType())
+        } catch (e: Throwable) {
+            Logger.e(TAG, "Failed to start foreground", e)
         }
 
         try {
@@ -441,7 +451,7 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
 
     @Suppress("DEPRECATION")
     private fun getStartForegroundServiceType(): Int {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
         } else {
             0
@@ -454,6 +464,10 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
             stopSelf()
             return START_NOT_STICKY
         }
+        if (intent == null) {
+            Logger.i(TAG, "service restarted by the system, rebuilding web player")
+            runCatching { com.project.lol.webview.WebViewHost.ensure(this) }
+        }
         try {
             ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotificationSafe(), getStartForegroundServiceType())
         } catch (e: Throwable) {
@@ -464,7 +478,7 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to handle media button intent", e)
         }
-        return START_NOT_STICKY
+        return START_STICKY
     }
 
     override fun onGetRoot(
@@ -475,6 +489,7 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
         val andAuto = getSharedPreferences("spotilol_prefs", MODE_PRIVATE)
             .getBoolean("AndAuto", true)
         if (!andAuto) return null
+        browserBound = true
         com.project.lol.webview.WebViewHost.ensure(this)
         val extras = Bundle().apply {
             putBoolean("android.media.browse.SEARCH_SUPPORTED", true)
@@ -483,6 +498,12 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
             putInt("android.media.browse.CONTENT_STYLE_PLAYABLE_HINT", 1)
         }
         return BrowserRoot(MEDIA_ID_ROOT, extras)
+    }
+
+    override fun onUnbind(intent: Intent?): Boolean {
+        browserBound = false
+        Logger.i(TAG, "media browser client unbound")
+        return super.onUnbind(intent)
     }
 
     override fun onLoadChildren(
@@ -504,10 +525,13 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
             lastActiveContextId = parentId
         }
         result.detach()
+        pendingCallbacks.remove(parentId)?.sendResult(mutableListOf())
         pendingCallbacks[parentId] = result
-        wakeAndRun("if (typeof window.fetchMediaItems === 'function') window.fetchMediaItems('$parentId');")
+        wakeAndRun("if (typeof window.fetchMediaItems === 'function') window.fetchMediaItems(${jsString(parentId)});")
         Handler(Looper.getMainLooper()).postDelayed({
-            pendingCallbacks.remove(parentId)?.sendResult(mutableListOf())
+            if (pendingCallbacks.remove(parentId, result)) {
+                result.sendResult(mutableListOf())
+            }
         }, if (playerLoaded) 20000L else 60000L)
     }
 
@@ -534,14 +558,16 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
             return
         }
         result.detach()
+        pendingSearchCallbacks.remove(query)?.sendResult(mutableListOf())
         pendingSearchCallbacks[query] = result
-        wakeAndRun("if (typeof window.searchMediaItems === 'function') window.searchMediaItems('$query');")
+        wakeAndRun("if (typeof window.searchMediaItems === 'function') window.searchMediaItems(${jsString(query)});")
     }
 
     private fun wakeAndRun(js: String) {
         val wv = webView ?: return
         Handler(Looper.getMainLooper()).post {
             try {
+                val wv = webView ?: com.project.lol.webview.WebViewHost.ensure(this)
                 wv.resumeTimers()
                 wv.onResume()
                 wv.dispatchWindowVisibilityChanged(android.view.View.VISIBLE)
@@ -554,7 +580,7 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
 
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
-        if (level >= TRIM_MEMORY_RUNNING_LOW) {
+        if (level >= TRIM_MEMORY_UI_HIDDEN) {
             coverBitmap = null
             lastCoverUrl = ""
         }
@@ -563,6 +589,7 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
     override fun onDestroy() {
         releaseWakeLock()
         instance = null
+        browserBound = false
         try { unregisterReceiver(actionReceiver) } catch (_: Exception) {}
         try { unregisterReceiver(bluetoothReceiver) } catch (_: Exception) {}
         try { unregisterReceiver(audioBecomingNoisyReceiver) } catch (_: Exception) {}
@@ -662,10 +689,11 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
 
         override fun onPlayFromMediaId(mediaId: String?, extras: Bundle?) {
             val context = lastActiveContextId
+            val safeId = jsString(mediaId)
             if (context != null && mediaId != null) {
-                wakeAndRun("playFromUri('$mediaId', '$context');")
+                wakeAndRun("playFromUri($safeId, ${jsString(context)});")
             } else {
-                wakeAndRun("playFromUri('$mediaId');")
+                wakeAndRun("playFromUri($safeId);")
             }
         }
     }
@@ -814,6 +842,7 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
 
     fun updatePlaybackPosition(position: Long) {
         currentPosition = position
+        if (isPlaying) acquireWakeLock()
         updatePlaybackState()
         pushWidgetState()
     }
@@ -837,7 +866,6 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
             repeat = isRepeat,
             position = currentPosition,
             duration = currentDuration,
-            accent = accent(),
             source = WidgetState.SOURCE_WEB,
             cover = coverBitmap
         )
@@ -1058,7 +1086,10 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
             wakeLock = pm.newWakeLock(
                 PowerManager.PARTIAL_WAKE_LOCK,
                 "spotilol:media_playback"
-            ).apply { acquire(60 * 60 * 1000L) }
+            )
+        }
+        if (wakeLock?.isHeld != true) {
+            wakeLock?.acquire(WAKE_LOCK_RENEW_MS)
         }
     }
 
@@ -1070,6 +1101,11 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
+        if (browserBound) {
+            Logger.i(TAG, "task removed, keeping service and webview for the bound media browser client")
+            super.onTaskRemoved(rootIntent)
+            return
+        }
         val stopOnSwipe = getSharedPreferences("spotilol_prefs", MODE_PRIVATE)
             .getBoolean("SwipeStop", true)
         if (stopOnSwipe) {
@@ -1084,8 +1120,16 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
             } catch (_: Exception) {}
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
+            mainHandler.postDelayed({ releaseWebViewAfterTaskRemoved() }, 500)
         }
         super.onTaskRemoved(rootIntent)
+    }
+
+    private fun releaseWebViewAfterTaskRemoved() {
+        if (browserBound) return
+        if (com.project.lol.webview.WebViewHost.uiHost != null) return
+        Logger.i(TAG, "task removed, releasing webview")
+        com.project.lol.webview.WebViewHost.release()
     }
 
     override fun attachBaseContext(newBase: Context) {

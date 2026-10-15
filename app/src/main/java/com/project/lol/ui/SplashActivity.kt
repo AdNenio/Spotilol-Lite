@@ -80,6 +80,16 @@ private const val SPLASH_MIN_MS = 4000L
 
 class SplashActivity : ComponentActivity() {
 
+    private fun fadeTransition() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, android.R.anim.fade_in, android.R.anim.fade_out)
+            overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, android.R.anim.fade_in, android.R.anim.fade_out)
+        } else {
+            @Suppress("DEPRECATION")
+            overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         WindowCompat.getInsetsController(window, window.decorView).apply {
@@ -149,7 +159,7 @@ class SplashActivity : ComponentActivity() {
             LaunchedEffect(Unit) {
                 if (prefs.getBoolean("OfflineMode", false)) {
                     startActivity(Intent(this@SplashActivity, OfflineActivity::class.java))
-                    overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+                    fadeTransition()
                     finish()
                     return@LaunchedEffect
                 }
@@ -186,7 +196,7 @@ class SplashActivity : ComponentActivity() {
                         Intent(this@SplashActivity, MainActivity::class.java)
                     }
                 )
-                overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+                fadeTransition()
                 finish()
             }
 

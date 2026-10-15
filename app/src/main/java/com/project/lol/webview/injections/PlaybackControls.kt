@@ -2,7 +2,12 @@ package com.project.lol.webview.injections
 
 object PlaybackControls {
     const val CONTENT = """
+            window.splAbortPause = function() {
+                window.__splPauseTok = (window.__splPauseTok || 0) + 1;
+                window.__splPauseActive = null;
+            };
             window.playFromUri = function(uri, contextUri) {
+                try { window.splAbortPause(); } catch(e) {}
                 var playContext = contextUri || uri;
                 var isLikedSongs = (playContext === 'your_library' || playContext.indexOf('collection') !== -1 || playContext === 'playlists' || playContext === 'spotify:collection:tracks');
 
@@ -109,53 +114,74 @@ object PlaybackControls {
                     else cb('unknown');
                 },400);
             };
-            window.splPauseRetry=function(tries){
+            window.splPauseRetry=function(tries,gen,probes){
                 tries=tries||0;
+                probes=probes||0;
+                if(gen==null){
+                    if(window.__splPauseActive!=null) return;
+                    window.__splPauseTok=(window.__splPauseTok||0)+1;
+                    gen=window.__splPauseTok;
+                    window.__splPauseActive=gen;
+                }
+                var finish=function(msg,lvl){
+                    if(window.__splPauseActive===gen) window.__splPauseActive=null;
+                    if(msg){ try{ AndBridge.dbg(lvl,msg); }catch(e){} }
+                };
+                if(gen!==window.__splPauseTok){
+                    if(window.__splPauseActive===gen) window.__splPauseActive=null;
+                    return;
+                }
                 var cur=(typeof window.splIsPlaying==='function')?window.splIsPlaying():null;
-                if(cur===false) return;
-                if(tries>0 && cur!==true) return;
+                if(cur===false){ finish('bt auto-pause: confirmed paused','s'); return; }
+                if(cur!==true){
+                    if(probes>=3){ finish('bt auto-pause: play state unknown, aborting without click','w'); return; }
+                    setTimeout(function(){ window.splPauseRetry(tries,gen,probes+1); },400);
+                    return;
+                }
                 var pb=window.splEnsurePb();
-                if(!pb) return;
+                if(!pb){ finish(null); return; }
                 try{ window.reqPause=true; window.ulFlag=false; }catch(e){}
                 pb.click();
                 setTimeout(function(){
+                    if(gen!==window.__splPauseTok){
+                        if(window.__splPauseActive===gen) window.__splPauseActive=null;
+                        return;
+                    }
                     window.splPauseOutcome(function(outcome){
-                        if(outcome==='paused'){
-                            try{ AndBridge.dbg('s','bt auto-pause: confirmed paused'); }catch(e){}
+                        if(gen!==window.__splPauseTok){
+                            if(window.__splPauseActive===gen) window.__splPauseActive=null;
                             return;
                         }
-                        if(outcome==='unknown'){
-                            try{ AndBridge.dbg('w','bt auto-pause: play state unknown, not retrying'); }catch(e){}
-                            return;
-                        }
-                        if(tries>=3){
-                            try{ AndBridge.dbg('e','bt auto-pause: playback continued after '+(tries+1)+' attempts'); }catch(e){}
-                            return;
-                        }
+                        if(outcome==='paused'){ finish('bt auto-pause: confirmed paused','s'); return; }
+                        if(outcome==='unknown'){ finish('bt auto-pause: play state unknown, not retrying','w'); return; }
+                        if(tries>=3){ finish('bt auto-pause: playback continued after '+(tries+1)+' attempts','e'); return; }
                         try{ AndBridge.dbg('w','bt auto-pause: still playing, retry '+(tries+1)); }catch(e){}
-                        window.splPauseRetry(tries+1);
+                        window.splPauseRetry(tries+1,gen,probes);
                     });
                 },900);
             };
             window.actPlayPause = function(play) {
+                var cur = (typeof window.splIsPlaying === 'function') ? window.splIsPlaying() : null;
+                if (play === false) {
+                    window.splPauseRetry(0);
+                    return;
+                }
+                window.splAbortPause();
                 var pb = window.splEnsurePb();
                 if (!pb) return;
-                var cur = (typeof window.splIsPlaying === 'function') ? window.splIsPlaying() : null;
                 if (play === null || typeof play === 'undefined' || cur === null) {
                     pb.click();
                 } else if (play === true) {
                     if (!cur) pb.click();
-                } else if (play === false) {
-                    window.splPauseRetry(0);
                 }
             };
             window.actSkipBack = function() {
                 var bb = document.querySelector('button[data-testid=control-button-skip-back]');
-                if(bb) { AndBridge.wakeUp(); bb.click(); }
+                if(bb) { window.splAbortPause(); AndBridge.wakeUp(); bb.click(); }
             };
             window.actSkipForward = function() {
                 var fb = document.querySelector('button[data-testid=control-button-skip-forward]');
-                if(fb) { AndBridge.wakeUp(); fb.click(); }
+                if(fb) { window.splAbortPause(); AndBridge.wakeUp(); fb.click(); }
             };
             window.splShuffleBtn = function() {
                 var b = document.querySelector('button[data-testid="control-button-shuffle"]');
@@ -211,6 +237,7 @@ object PlaybackControls {
                 }
             };
             window.actAddToFav = function() {
+                if(window.__splFavBusy) return;
                 var fb = document.querySelector('div[data-testid=now-playing-widget]>div:last-child>button');
                 if(fb) {
                     if(fb.getAttribute('aria-checked')==='false') {
@@ -218,9 +245,12 @@ object PlaybackControls {
                         isfav=true;
                         updMedia();
                     } else {
+                        window.__splFavBusy = true;
                         AndBridge.wakeUp();
                         fb.click();
+                        var polls = 0;
                         var rfint = setInterval(function(){
+                            polls++;
                             var fr = document.querySelector('#context-menu button[role=menuitemcheckbox][aria-checked=true]');
                             if(fr) {
                                 clearInterval(rfint);
@@ -229,7 +259,12 @@ object PlaybackControls {
                                     var sb = document.querySelector('#context-menu button[type=submit]');
                                     if(sb) { sb.click(); isfav=false; updMedia(); }
                                     AndBridge.wakeOff();
+                                    window.__splFavBusy = false;
                                 },500);
+                            } else if (polls > 15) {
+                                clearInterval(rfint);
+                                AndBridge.wakeOff();
+                                window.__splFavBusy = false;
                             }
                         },1000);
                     }
@@ -239,6 +274,6 @@ object PlaybackControls {
                 var rg = document.querySelector('div[data-testid=playback-progressbar] input[type=range]');
                 if(rg) { rg.value=pos+1; rg.dispatchEvent(new Event('change',{bubbles:true})); }
             };
-        
+
     """
 }

@@ -1,10 +1,14 @@
 package com.project.lol.innertube
 
 import com.project.lol.innertube.models.YouTubeClient
+import com.project.lol.innertube.models.YouTubeClient.Companion.ANDROID_MUSIC
 import com.project.lol.innertube.models.YouTubeClient.Companion.WEB_REMIX
 import com.project.lol.innertube.models.YouTubeLocale
 import com.project.lol.innertube.models.getContinuation
 import com.project.lol.innertube.models.getItems
+import com.project.lol.innertube.models.response.LyricsData
+import com.project.lol.innertube.models.response.LyricsResponse
+import com.project.lol.innertube.models.response.NextResponse
 import com.project.lol.innertube.models.response.PlayerResponse
 import com.project.lol.innertube.models.response.SearchResponse
 import com.project.lol.innertube.pages.SearchPage
@@ -24,7 +28,8 @@ import java.net.Proxy
  *
  * Trimmed for spotufi: only the pieces the app uses survive — track search
  * (to match a Spotify track to a YouTube video), the player endpoint (to
- * resolve the audio stream) and the NewPipe fallback deobfuscation.
+ * resolve the audio stream), the lyrics browse (next + browse, for the
+ * download-time lyrics export) and the NewPipe fallback deobfuscation.
  */
 object YouTube {
     private val innerTube = InnerTube()
@@ -65,7 +70,10 @@ object YouTube {
             innerTube.useLoginForBrowse = value
         }
 
+    @Suppress("unused")
     fun setCacheDir(dir: java.io.File?) = innerTube.setCacheDir(dir)
+    fun setCacheDir(dir: java.io.File?, maxBytes: Long) = innerTube.setCacheDir(dir, maxBytes)
+    fun setCacheLimit(maxBytes: Long) = innerTube.setCacheLimit(maxBytes)
 
     suspend fun search(query: String, filter: SearchFilter): Result<SearchResult> = runCatching {
         val response = innerTube.search(WEB_REMIX, query, filter.value).body<SearchResponse>()
@@ -96,6 +104,54 @@ object YouTube {
 
     suspend fun player(videoId: String, playlistId: String? = null, client: YouTubeClient, signatureTimestamp: Int? = null, poToken: String? = null): Result<PlayerResponse> = runCatching {
         innerTube.player(client, videoId, playlistId, signatureTimestamp, poToken).body<PlayerResponse>()
+    }
+
+    /**
+     * Resolves the opaque lyrics browseId for a track. The id does **not** derive from the
+     * videoId, so this `next` round-trip is mandatory before any lyrics browse.
+     */
+    suspend fun lyricsBrowseId(videoId: String): Result<String?> = runCatching {
+        innerTube.next(WEB_REMIX, videoId).body<NextResponse>()
+            .contents
+            ?.singleColumnMusicWatchNextResultsRenderer
+            ?.tabbedRenderer
+            ?.watchNextTabbedResultsRenderer
+            ?.tabs
+            ?.mapNotNull { it.tabRenderer }
+            ?.firstOrNull { it.title?.contains("lyric", ignoreCase = true) == true }
+            ?.endpoint
+            ?.browseEndpoint
+            ?.browseId
+    }
+
+    /**
+     * Timed lyrics: one cue per line with millisecond bounds. Only the ANDROID_MUSIC client
+     * answers with these; WEB_REMIX returns the plain text instead.
+     */
+    suspend fun timedLyrics(browseId: String): Result<List<LyricsData.TimedLine>?> = runCatching {
+        innerTube.browse(ANDROID_MUSIC, browseId).body<LyricsResponse>()
+            .contents
+            ?.elementRenderer
+            ?.newElement
+            ?.type
+            ?.componentType
+            ?.model
+            ?.timedLyricsModel
+            ?.lyricsData
+            ?.timedLyricsData
+            ?.takeIf { it.isNotEmpty() }
+    }
+
+    /** Plain, untimed lyrics text. Fallback for when the timed client yields nothing. */
+    suspend fun staticLyrics(browseId: String): Result<String?> = runCatching {
+        innerTube.browse(WEB_REMIX, browseId).body<LyricsResponse>()
+            .contents
+            ?.sectionListRenderer
+            ?.contents
+            ?.firstNotNullOfOrNull { it.musicDescriptionShelfRenderer?.description?.runs }
+            ?.joinToString("\n") { it.text }
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
     }
 
     suspend fun visitorData(): Result<String> = runCatching {

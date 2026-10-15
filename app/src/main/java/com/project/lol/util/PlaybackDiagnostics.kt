@@ -10,7 +10,13 @@ object PlaybackDiagnostics {
     private const val SECURITY_LEVEL = "securityLevel"
     private val WIDEVINE_UUID: UUID = UUID.fromString("edef8ba9-79d6-4ace-a3c8-27dcd51d21ed")
 
-    fun log(context: Context) {
+    data class DrmProbe(
+        val webviewVersion: String,
+        val widevineSupported: Boolean,
+        val summary: String,
+    )
+
+    fun probe(context: Context): DrmProbe {
         val app = context.applicationContext
         val pkg = runCatching { WebViewCompat.getCurrentWebViewPackage(app) }.getOrNull()
         val webviewVersion = pkg?.versionName ?: "unknown"
@@ -31,8 +37,17 @@ object PlaybackDiagnostics {
             runCatching { drm?.close() }
         }
 
-        val summary = "webview=$webviewVersion widevineSupported=$supported " +
-            "widevineLevel=$level vendor=$vendor widevineVersion=$drmVersion"
-        if (pkg == null || !supported) Logger.w(TAG, summary) else Logger.i(TAG, summary)
+        val summary =
+            "webview=$webviewVersion widevineSupported=$supported widevineLevel=$level vendor=$vendor widevineVersion=$drmVersion"
+        return DrmProbe(webviewVersion, supported, summary)
+    }
+
+    fun log(context: Context) {
+        val probe = probe(context)
+        if (probe.webviewVersion == "unknown" || !probe.widevineSupported) {
+            Logger.w(TAG, probe.summary)
+        } else {
+            Logger.i(TAG, probe.summary)
+        }
     }
 }

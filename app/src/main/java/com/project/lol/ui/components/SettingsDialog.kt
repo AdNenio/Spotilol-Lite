@@ -39,6 +39,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
@@ -73,6 +74,8 @@ fun SettingsDialog(
     onKeepScreenOnChange: (Boolean) -> Unit,
     themePreset: String,
     onThemePresetChange: (String) -> Unit,
+    themeSecondary: Color?,
+    onThemeSecondaryChange: (Color?) -> Unit,
     onOfflineModeChange: (Boolean) -> Unit,
     onSaveProfile: (String, String) -> Unit,
     onLoadProfile: (String) -> Unit,
@@ -158,6 +161,8 @@ fun SettingsDialog(
                                         onKeepScreenOnChange = onKeepScreenOnChange,
                                         themePreset = themePreset,
                                         onThemePresetChange = onThemePresetChange,
+                                        themeSecondary = themeSecondary,
+                                        onThemeSecondaryChange = onThemeSecondaryChange,
                                         onOfflineModeChange = onOfflineModeChange,
                                         onSaveProfile = onSaveProfile,
                                         onLoadProfile = onLoadProfile,

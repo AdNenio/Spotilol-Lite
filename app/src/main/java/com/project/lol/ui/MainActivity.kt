@@ -10,6 +10,7 @@ import android.content.SharedPreferences
 import android.content.pm.ActivityInfo
 import android.content.pm.ApplicationInfo
 import android.content.res.Configuration
+import android.database.ContentObserver
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.drawable.Icon
@@ -18,39 +19,46 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.util.Rational
-import android.widget.Toast
 import android.view.LayoutInflater
 import android.view.View
-import android.view.WindowManager
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.webkit.CookieManager
 import android.webkit.WebStorage
 import android.webkit.WebView
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -59,10 +67,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -73,8 +77,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -82,64 +84,68 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Popup
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.webkit.WebViewCompat
 import com.google.firebase.analytics.FirebaseAnalytics
 import com.project.lol.R
-import com.project.lol.bridge.SpotifyBridge
 import com.project.lol.offline.DownloadManager
 import com.project.lol.profile.ProfileManager
 import com.project.lol.service.MediaNotificationService
 import com.project.lol.timer.AppQuit
 import com.project.lol.timer.SleepTimerAction
 import com.project.lol.timer.SleepTimerManager
+import com.project.lol.ui.components.BatteryOptimizationDialog
 import com.project.lol.ui.components.SettingsDialog
 import com.project.lol.ui.components.SleepTimerDialog
 import com.project.lol.ui.theme.SpotifyTheme
 import com.project.lol.ui.theme.ThemeController
+import com.project.lol.ui.theme.ThemeHarmony
 import com.project.lol.ui.theme.ThemePresets
+import com.project.lol.util.AppLocale
+import com.project.lol.util.BatterySaver
 import com.project.lol.util.BuildInfo
 import com.project.lol.util.Logger
 import com.project.lol.util.UpdateChecker
 import com.project.lol.webview.WebViewHost
 import com.project.lol.webview.helpers.DevLogPrelude
-import com.project.lol.webview.helpers.LyricsTheme
 import com.project.lol.webview.helpers.buildAmoledJs
 import com.project.lol.webview.helpers.buildCustomCssJs
 import com.project.lol.webview.injections.LogoutCheck
+import com.project.lol.widget.WidgetActions
 import compose.icons.TablerIcons
 import compose.icons.tablericons.Menu2
 import compose.icons.tablericons.Settings
+import org.json.JSONObject
 import java.lang.ref.WeakReference
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.math.min
-import org.json.JSONObject
-import androidx.core.content.edit
-import androidx.core.graphics.scale
-import androidx.core.graphics.toColorInt
-import com.project.lol.ui.components.ErrorScreen
-import com.project.lol.ui.components.mapWebViewError
-import com.project.lol.util.AppLocale
-import java.util.Locale
+import android.media.AudioManager
+import androidx.compose.runtime.mutableFloatStateOf
+import com.project.lol.ui.components.VolumeDialog
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : ComponentActivity(), WebViewHost.UiHost {
 
     companion object {
         private const val TAG = "main"
+
+        @Volatile
+        private var batteryPromptChecked = false
     }
 
     private val webView: WebView?
@@ -169,10 +175,20 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
     private val videoFullscreenState = mutableStateOf(false)
     private val keepScreenOnState = mutableStateOf(false)
     private val themePresetState = mutableStateOf(ThemePresets.DEFAULT_ID)
+    private val themeSecondaryState = mutableStateOf<Color?>(null)
 
     private val showSleepTimerDialog = mutableStateOf(false)
+    private val showBatteryDialog = mutableStateOf(false)
     private val sleepTimerInputText = mutableStateOf("")
     private val sleepTimerState = mutableStateOf(SleepTimerManager.state())
+    private val showVolumeDialog = mutableStateOf(false)
+    private val volumeFractionState = mutableFloatStateOf(0f)
+    private val volumeObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
+        override fun onChange(selfChange: Boolean, uri: Uri?) {
+            if (uri != null && !uri.path.orEmpty().contains("volume")) return
+            publishVolumeIcon(syncVolumeState())
+        }
+    }
 
     private val loadingProgress = mutableIntStateOf(100)
     private val blockServiceWorkerState = mutableStateOf(true)
@@ -217,6 +233,8 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
 
         prefs = getSharedPreferences("spotilol_prefs", MODE_PRIVATE)
 
+        contentResolver.registerContentObserver(Settings.System.CONTENT_URI, true, volumeObserver)
+
         SleepTimerManager.loadAction(this)
         sleepTimerState.value = SleepTimerManager.state()
 
@@ -243,6 +261,7 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
         landscapeModeState.value = prefs.getBoolean("LandscapeMode", false)
         keepScreenOnState.value = prefs.getBoolean("KeepScreenOn", false)
         themePresetState.value = prefs.getString("ThemePreset", ThemePresets.DEFAULT_ID) ?: ThemePresets.DEFAULT_ID
+        themeSecondaryState.value = ThemeHarmony.parseHex(prefs.getString("ThemeSecondary", null))
         blockServiceWorkerState.value = prefs.getBoolean("BlockServiceWorker", true)
         applyOrientation()
         applyKeepScreenOn()
@@ -268,7 +287,10 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
             val landscapeMode = landscapeModeState.value
             val keepScreenOn = keepScreenOnState.value
             val themePreset = themePresetState.value
+            val themeSecondary = themeSecondaryState.value
             val showDialog = showSleepTimerDialog.value
+            val showVolume = showVolumeDialog.value
+            val showBatteryPrompt = showBatteryDialog.value
             val loadProgress = loadingProgress.intValue
             val blockServiceWorker = blockServiceWorkerState.value
             val pipFilling = pipVideoActive.value
@@ -353,6 +375,11 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
                     onThemePresetChange = { id ->
                         themePresetState.value = id
                         ThemeController.updatePreset(id)
+                    },
+                    themeSecondary = themeSecondary,
+                    onThemeSecondaryChange = { color ->
+                        themeSecondaryState.value = color
+                        ThemeController.updateSecondary(color)
                     },
                     onOfflineModeChange = { switchOfflineMode(it) },
                     onSaveProfile = { name, cookies -> saveProfile(name, cookies) },
@@ -448,9 +475,15 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
                                 }
                             }
 
-                            bridge.onPlayLoaded = {
-                                publishTimerHighlight(SleepTimerManager.isActive)
-                            }
+                                bridge.onVolumeDialogRequest = {
+                                    publishVolumeIcon(syncVolumeState())
+                                    showVolumeDialog.value = true
+                                }
+
+                                bridge.onPlayLoaded = {
+                                    publishTimerHighlight(SleepTimerManager.isActive)
+                                    publishVolumeIcon(syncVolumeState())
+                                }
 
                             bridge.onMediaPosition = { position ->
                                 SleepTimerManager.onPosition(position)
@@ -615,6 +648,34 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
                                     }
                                 )
                             }
+
+                                if (showVolume) {
+                                    VolumeDialog(
+                                        fraction = volumeFractionState.floatValue,
+                                        onChange = { fraction ->
+                                            volumeFractionState.value = fraction
+                                            applySystemVolume(fraction)
+                                        },
+                                        onDismiss = { showVolumeDialog.value = false }
+                                    )
+                                }
+
+                                if (showBatteryPrompt) {
+                                    BatteryOptimizationDialog(
+                                        onConfirm = {
+                                            showBatteryDialog.value = false
+                                            analytics.logEvent("battery_prompt_allow", null)
+                                            if (!BatterySaver.requestExemption(this@MainActivity)) {
+                                                Logger.w(TAG, "battery exemption dialog unavailable, opening app details")
+                                                BatterySaver.openAppSettings(this@MainActivity)
+                                            }
+                                        },
+                                        onDismiss = {
+                                            showBatteryDialog.value = false
+                                            analytics.logEvent("battery_prompt_dismiss", null)
+                                        }
+                                    )
+                                }
                         } else {
                             AndroidView(
                                 factory = { context ->
@@ -682,6 +743,7 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
         Logger.i(TAG, "offline mode -> $enabled, restarting app")
         SleepTimerManager.cancel()
         prefs.edit().putBoolean("OfflineMode", enabled).apply()
+        WidgetActions.setOfflineMode(this, enabled)
         stopService(Intent(this, MediaNotificationService::class.java))
         val intent = Intent(this, SplashActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
@@ -757,16 +819,18 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
     }
 
     private fun handleSleepTimerExpire() {
-        when (SleepTimerManager.action) {
-            SleepTimerAction.PAUSE -> {
-                Logger.i(TAG, "sleep timer expired: pausing playback")
-                webView?.evaluateJavascript("actPlayPause(false)", null)
-            }
+        runOnUiThread {
+            when (SleepTimerManager.action) {
+                SleepTimerAction.PAUSE -> {
+                    Logger.i(TAG, "sleep timer expired: pausing playback")
+                    webView?.evaluateJavascript("actPlayPause(false)", null)
+                }
 
-            SleepTimerAction.QUIT -> {
-                Logger.i(TAG, "sleep timer expired: quitting app")
-                webView?.evaluateJavascript("actPlayPause(false)", null)
-                AppQuit.quit(this)
+                SleepTimerAction.QUIT -> {
+                    Logger.i(TAG, "sleep timer expired: quitting app")
+                    webView?.evaluateJavascript("actPlayPause(false)", null)
+                    AppQuit.quit(this)
+                }
             }
         }
     }
@@ -781,6 +845,39 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
                 if(t) t.classList.toggle('spl-active',a);
             })($active)
             """.trimIndent(),
+            null
+        )
+    }
+
+    private fun audioManager(): AudioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+
+    private fun syncVolumeState(): Boolean {
+        val am = audioManager()
+        val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+        val current = runCatching { am.getStreamVolume(AudioManager.STREAM_MUSIC) }.getOrDefault(0)
+        val fraction = (current.toFloat() / max).coerceIn(0f, 1f)
+        volumeFractionState.value = fraction
+        return fraction <= 0f
+    }
+
+    private fun applySystemVolume(fraction: Float) {
+        val am = audioManager()
+        val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+        val level = (fraction.coerceIn(0f, 1f) * max).roundToInt()
+        runCatching { am.setStreamVolume(AudioManager.STREAM_MUSIC, level, 0) }
+        volumeFractionState.value = level.toFloat() / max
+        publishVolumeIcon(level <= 0)
+    }
+
+    private fun publishVolumeIcon(muted: Boolean) {
+        webView?.evaluateJavascript(
+            """
+        (function(m){
+            window.__splSysMuted=!!m;
+            var b=document.getElementById('spl-vol-btn');
+            if(b) b.classList.toggle('spl-active',!!m);
+        })($muted)
+        """.trimIndent(),
             null
         )
     }
@@ -1300,9 +1397,23 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
         landscapeModeState.value = prefs.getBoolean("LandscapeMode", false)
         keepScreenOnState.value = prefs.getBoolean("KeepScreenOn", false)
         themePresetState.value = prefs.getString("ThemePreset", ThemePresets.DEFAULT_ID) ?: ThemePresets.DEFAULT_ID
+        themeSecondaryState.value = ThemeHarmony.parseHex(prefs.getString("ThemeSecondary", null))
         blockServiceWorkerState.value = prefs.getBoolean("BlockServiceWorker", true)
         applyOrientation()
         applyKeepScreenOn()
+
+        if (serviceEnabledState.value && WebViewHost.webView == null) {
+            Logger.i(TAG, "resuming without a live webview, rebuilding")
+            webViewGeneration.intValue++
+        }
+
+        if (!batteryPromptChecked) {
+            batteryPromptChecked = true
+            if (BatterySaver.shouldPrompt(this)) {
+                Logger.i(TAG, "first resume this run: showing battery optimization prompt")
+                showBatteryDialog.value = true
+            }
+        }
 
         val customCss = prefs.getString("CustomCss", "") ?: ""
         val amoledEnabled = prefs.getBoolean("AmoledTheme", false)
@@ -1326,7 +1437,6 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
                 append(buildAmoledJs(amoledEnabled))
                 append(ThemeController.buildAccentJs(this@MainActivity))
                 append(buildCustomCssJs(customCss))
-                append(LyricsTheme.buildLyricsStyleJs(prefs.getString("LyricsStyle", LyricsTheme.DEFAULT_STYLE) ?: LyricsTheme.DEFAULT_STYLE))
             }
             view.evaluateJavascript(js, null)
 
@@ -1336,6 +1446,7 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
                     view.loadUrl("https://accounts.spotify.com/login")
                 }
             }
+            publishVolumeIcon(syncVolumeState())
         }
     }
 
@@ -1394,7 +1505,7 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
         val js = """
             (function() {
                 try {
-                    var target = '$path';
+                    var target = ${JSONObject.quote(path)};
                     if (window.location.pathname === target) return 'same';
                     window.history.pushState({}, '', target);
                     window.dispatchEvent(new PopStateEvent('popstate'));
@@ -1431,6 +1542,7 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
         WebViewHost.bridge?.rebind(WeakReference(null))
         if (MediaNotificationService.instance == null) WebViewHost.release()
         serviceStarted = false
+        runCatching { contentResolver.unregisterContentObserver(volumeObserver) }
         super.onDestroy()
     }
 

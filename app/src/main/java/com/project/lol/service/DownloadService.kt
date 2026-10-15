@@ -180,6 +180,22 @@ class DownloadService : Service() {
         )
     }
 
+    override fun onTimeout(fgsType: Int, startId: Int) {
+        Logger.w("DownloadService", "dataSync foreground service timed out (type=$fgsType startId=$startId)")
+        handleForegroundTimeout()
+    }
+
+    override fun onTimeout(fgsType: Int) {
+        Logger.w("DownloadService", "dataSync foreground service timed out (type=$fgsType)")
+        handleForegroundTimeout()
+    }
+
+    private fun handleForegroundTimeout() {
+        DownloadManager.cancelAll()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(AppLocale.wrap(newBase))
     }

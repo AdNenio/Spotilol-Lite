@@ -1,25 +1,59 @@
 package com.project.lol.webview.helpers
 
+import android.content.SharedPreferences
 import com.project.lol.R
+import java.util.Locale
 import org.json.JSONObject
 
 /**
  * Spotilol - Lyrics Style Engine.
  *
- * Injects a dedicated <style id="spotilol-lyrics-style"> element. It does
- * NOT touch 'spotilol-custom-css' (owned by the CustomCss setting), so the
- * two features can coexist without clobbering each other.
+ * Emits a dedicated <style id="spotilol-lyrics-style"> element. It never
+ * touches 'spotilol-custom-css' (owned by the CustomCss setting).
  *
- * Style "default" removes the element entirely - Spotify renders untouched.
- * Every other style shares the background-seam fix (the old one-screen blue
- * layer hidden, full-height lyric chain painted with
- * --lyrics-color-background) so the album color flows to the bottom in all
- * of them.
+ * The engine no longer relies on Spotify's obfuscated class hashes - those
+ * rotate every build. It anchors only on stable hooks:
+ *   - [data-testid="lyrics-line"] and its single text child
+ *   - [data-spl-lyr="a|p|u"] / [data-spl-lyr-root], written at runtime by
+ *     LyricsEngine (the dynamic resolver)
+ *   - the live CSS vars --lyrics-color-* that Spotify keeps on the lyrics tree
+ *
+ * Presets define the flavour (size curve, weight, glow, state dimming); the
+ * size / spacing / alignment / animation controls are user overrides on top.
  */
+
+data class LyricsStyle(
+    val preset: String = LyricsTheme.DEFAULT_STYLE,
+    val scale: Float = 1f,
+    val spacing: Float = 1f,
+    val align: String = LyricsTheme.ALIGN_START,
+    val animate: Boolean = true
+) {
+    companion object {
+        const val PREF_PRESET = "LyricsStyle"
+        const val PREF_SCALE = "LyricsScale"
+        const val PREF_SPACING = "LyricsSpacing"
+        const val PREF_ALIGN = "LyricsAlign"
+        const val PREF_ANIMATE = "LyricsAnimate"
+
+        /** Selected preset id (built-in or custom) - UI state only, never affects the CSS. */
+        const val PREF_PRESET_ID = "LyricsPresetId"
+
+        val PREF_KEYS = listOf(PREF_PRESET, PREF_SCALE, PREF_SPACING, PREF_ALIGN, PREF_ANIMATE)
+
+        fun from(prefs: SharedPreferences): LyricsStyle = LyricsStyle(
+            preset = prefs.getString(PREF_PRESET, LyricsTheme.DEFAULT_STYLE) ?: LyricsTheme.DEFAULT_STYLE,
+            scale = prefs.getFloat(PREF_SCALE, 1f),
+            spacing = prefs.getFloat(PREF_SPACING, 1f),
+            align = prefs.getString(PREF_ALIGN, LyricsTheme.ALIGN_START) ?: LyricsTheme.ALIGN_START,
+            animate = prefs.getBoolean(PREF_ANIMATE, true)
+        )
+    }
+}
 
 object LyricsTheme {
 
-    /** (prefValue, settingsLabelRes) - feeds SingleChoiceDialog directly. */
+    /** (prefValue, settingsLabelRes) - feeds the preset list. */
     val STYLE_OPTIONS: List<Pair<String, Int>> = listOf(
         "default" to R.string.settings_lyrics_style_spotify_default,
         "fullscreen" to R.string.settings_lyrics_style_fullscreen,
@@ -31,7 +65,93 @@ object LyricsTheme {
     const val DEFAULT_STYLE = "fullscreen"
     private const val STYLE_ID = "spotilol-lyrics-style"
 
-    fun buildLyricsStyleJs(style: String?): String {
+    const val ALIGN_START = "start"
+    const val ALIGN_CENTER = "center"
+    const val ALIGN_END = "end"
+    val ALIGN_OPTIONS = listOf(ALIGN_START, ALIGN_CENTER, ALIGN_END)
+
+    const val SCALE_MIN = 0.75f
+    const val SCALE_MAX = 1.6f
+    const val SPACING_MIN = 0.8f
+    const val SPACING_MAX = 2.2f
+
+    class Preset internal constructor(
+        val base: String,
+        val baseWide: String,
+        val lineHeight: Float,
+        val weight: Int,
+        val activeWeight: Int,
+        val activeScale: Float,
+        val activeShadow: String,
+        val passedOpacity: Float,
+        val upcomingOpacity: Float,
+        val paintBackground: Boolean,
+        val previewSp: Float
+    )
+
+    private val PRESETS: Map<String, Preset> = mapOf(
+        "default" to Preset(
+            "clamp(1.05rem, 4.6vw, 1.45rem)", "clamp(1.1rem, 2.1vw, 1.9rem)",
+            1.5f, 600, 700, 1.0f, "none", 0.45f, 0.85f, false, 15f
+        ),
+        "fullscreen" to Preset(
+            "clamp(1.15rem, 5.5vw, 1.6rem)", "clamp(1.25rem, 2.4vw, 2.25rem)",
+            1.45f, 700, 800, 1.06f, "0 0 18px rgba(255,255,255,.28), 0 2px 6px rgba(0,0,0,.5)",
+            0.30f, 0.55f, true, 17f
+        ),
+        "compact" to Preset(
+            "clamp(.9rem, 4.2vw, 1.15rem)", "clamp(.95rem, 1.9vw, 1.35rem)",
+            1.35f, 600, 700, 1.02f, "none", 0.28f, 0.50f, false, 14f
+        ),
+        "karaoke" to Preset(
+            "clamp(1.1rem, 5vw, 1.6rem)", "clamp(1.2rem, 2.6vw, 2rem)",
+            1.45f, 700, 900, 1.18f, "0 0 30px rgba(255,255,255,.45), 0 2px 8px rgba(0,0,0,.55)",
+            0.16f, 0.30f, true, 18f
+        ),
+        "bold" to Preset(
+            "clamp(1.2rem, 5.8vw, 1.75rem)", "clamp(1.3rem, 2.8vw, 2.4rem)",
+            1.5f, 800, 800, 1.04f, "0 2px 10px rgba(0,0,0,.6)", 0.42f, 0.72f, true, 18f
+        )
+    )
+
+    fun presetFor(id: String?): Preset = PRESETS[id] ?: PRESETS.getValue(DEFAULT_STYLE)
+
+    fun isBuiltIn(id: String?): Boolean = id != null && PRESETS.containsKey(id)
+
+    /** Clamps an untrusted style (imported file, stale prefs) into a usable range. */
+    fun sanitize(style: LyricsStyle): LyricsStyle = LyricsStyle(
+        preset = if (isBuiltIn(style.preset)) style.preset else DEFAULT_STYLE,
+        scale = style.scale.coerceIn(SCALE_MIN, SCALE_MAX),
+        spacing = style.spacing.coerceIn(SPACING_MIN, SPACING_MAX),
+        align = if (style.align in ALIGN_OPTIONS) style.align else ALIGN_START,
+        animate = style.animate
+    )
+
+    /** Approximate on-device preview params (dp-ish) for the settings preview. */
+    class PreviewStyle(
+        val baseSp: Float,
+        val lineHeight: Float,
+        val weight: Int,
+        val activeWeight: Int,
+        val activeScale: Float,
+        val passedOpacity: Float,
+        val upcomingOpacity: Float
+    )
+
+    fun previewStyle(style: LyricsStyle): PreviewStyle {
+        val p = presetFor(style.preset)
+        return PreviewStyle(
+            baseSp = p.previewSp * style.scale.coerceIn(SCALE_MIN, SCALE_MAX),
+            lineHeight = p.lineHeight * style.spacing.coerceIn(SPACING_MIN, SPACING_MAX),
+            weight = p.weight,
+            activeWeight = p.activeWeight,
+            activeScale = p.activeScale,
+            passedOpacity = p.passedOpacity,
+            upcomingOpacity = p.upcomingOpacity
+        )
+    }
+
+    fun buildLyricsStyleJs(style: LyricsStyle): String {
         val css = cssFor(style)
         return if (css.isEmpty()) {
             """
@@ -52,354 +172,84 @@ object LyricsTheme {
                 st.textContent = $jsonCss;
                 var target = document.head || document.documentElement;
                 if (target && !st.parentNode) target.appendChild(st);
+                if (window.__splLyricsResolve) window.__splLyricsResolve();
             })();
             """.trimIndent()
         }
     }
 
-    private fun cssFor(style: String?): String = when (style) {
-        "compact" -> SHARED_FIX + COMPACT_CSS
-        "karaoke" -> SHARED_FIX + KARAOKE_CSS
-        "bold" -> SHARED_FIX + BOLD_CSS
-        "fullscreen" -> SHARED_FIX + FULLSCREEN_CSS
-        else -> "" // "default" and anything unknown -> remove style
+    private fun cssFor(style: LyricsStyle): String {
+        val preset = PRESETS[style.preset] ?: return ""
+        val align = when (style.align) {
+            ALIGN_CENTER -> "center"
+            ALIGN_END -> "end"
+            else -> "start"
+        }
+        val origin = when (align) {
+            "center" -> "center center"
+            "end" -> "right center"
+            else -> "left center"
+        }
+        val scale = style.scale.coerceIn(SCALE_MIN, SCALE_MAX)
+        val spacing = style.spacing.coerceIn(SPACING_MIN, SPACING_MAX)
+        val line = "[data-testid=\"lyrics-line\"]"
+
+        return buildString {
+            append("/* --- Spotilol Lyrics Engine --- */\n")
+            append(":root{")
+            append("--spl-lyr-scale:").append(num(scale)).append(";")
+            append("--spl-lyr-space:").append(num(spacing)).append(";")
+            append("--spl-lyr-base:").append(preset.base).append(";")
+            append("--spl-lyr-lh:").append(num(preset.lineHeight)).append(";")
+            append("}\n")
+            append("@media (min-width:769px){:root{--spl-lyr-base:").append(preset.baseWide).append(";}}\n")
+
+            if (preset.paintBackground) {
+                append("[data-spl-lyr-root]{")
+                append("background-color:var(--spl-lyr-bg,transparent)!important;")
+                append("background-image:none!important;")
+                append("transition:background-color .6s ease!important;")
+                append("}\n")
+            }
+
+            append(line).append("{")
+            append("margin:0!important;")
+            append("padding:1px 0!important;")
+            append("font-size:calc(var(--spl-lyr-base) * var(--spl-lyr-scale))!important;")
+            append("line-height:calc(var(--spl-lyr-lh) * var(--spl-lyr-space))!important;")
+            append("text-align:").append(align).append("!important;")
+            append("overflow-wrap:anywhere!important;")
+            append("user-select:text!important;")
+            append("}\n")
+
+            append(line).append(">div{")
+            append("font-size:1em!important;")
+            append("line-height:inherit!important;")
+            append("font-weight:").append(preset.weight).append("!important;")
+            append("transform-origin:").append(origin).append(";")
+            if (style.animate) {
+                append("transition:opacity .35s ease,font-weight .35s cubic-bezier(.3,.7,.3,1),")
+                append("transform .35s cubic-bezier(.3,.7,.3,1),text-shadow .35s ease!important;")
+            } else {
+                append("transition:none!important;")
+            }
+            append("}\n")
+
+            append(line).append("[data-spl-lyr=\"p\"]>div{opacity:").append(num(preset.passedOpacity)).append("!important;}\n")
+            append(line).append("[data-spl-lyr=\"u\"]>div{opacity:").append(num(preset.upcomingOpacity)).append("!important;}\n")
+
+            append(line).append("[data-spl-lyr=\"a\"]>div{")
+            append("opacity:1!important;")
+            append("font-weight:").append(preset.activeWeight).append("!important;")
+            if (preset.activeScale != 1f) append("transform:scale(").append(num(preset.activeScale)).append(");")
+            if (preset.activeShadow != "none") append("text-shadow:").append(preset.activeShadow).append("!important;")
+            append("}\n")
+
+            append("@media (prefers-reduced-motion: reduce){")
+            append(line).append(">div{transition:none!important;}")
+            append("}\n")
+        }
     }
 
-    // ---------------------------------------------------------------
-    // SHARED: background-seam fix + viewport + credit + reduced motion
-    // (your v5 sections A, B, J, M)
-    // ---------------------------------------------------------------
-    private val SHARED_FIX = """
-/* --- Spotilol Lyrics Engine: shared fixes --- */
-
-/* Old ~1-screen background layer -> hidden */
-.nqmjceMqTFCSMXlnquLP { display: none !important; }
-
-/* Paint the full-height lyric container chain with the dynamic album color */
-.bqldaBkacR41KxR2Z0jY,
-.NAOY0Orzgl4rd4__VtAw,
-.l2GQ00sPnkqe8YLHcfzL,
-.l2GQ00sPnkqe8YLHcfzL > div {
-  background-color: var(--lyrics-color-background, #121212) !important;
-  background-image: none !important;
-  transition: background-color .6s ease !important;
-}
-
-/* Outer containers transparent */
-.WiwnWsPYbL585uUaVMp3,
-.main-view-container__scroll-node-child,
-.TheioDphh_FsNXvBiDj4 {
-  background-color: transparent !important;
-}
-
-/* Viewport scroll */
-[data-overlayscrollbars-viewport] {
-  overscroll-behavior-y: contain !important;
-  -webkit-overflow-scrolling: touch;
-}
-
-/* Musixmatch credit */
-.upDNlpL8xEkxmKWWw9IF {
-  margin: 16px 5% 0 !important;
-  text-align: center !important;
-  opacity: .45 !important;
-}
-.upDNlpL8xEkxmKWWw9IF .e-10860-text { font-size: 11px !important; }
-
-/* Reduce motion */
-@media (prefers-reduced-motion: reduce) {
-  [data-testid="lyrics-line"] ._3s1DGSMxRHUVPuxgkoss { transition: none !important; }
-}
-""".trimIndent()
-
-    // ---------------------------------------------------------------
-    // FULLSCREEN - your v5 body, unchanged
-    // ---------------------------------------------------------------
-    private val FULLSCREEN_CSS = """
-/* === FULLSCREEN: mobile fullscreen, album colors, glowing active line === */
-.l2GQ00sPnkqe8YLHcfzL {
-  width: 100% !important;
-  max-width: 100% !important;
-  margin: 0 !important;
-  padding: 8px 5% 140px 5% !important;
-  box-sizing: border-box !important;
-}
-.bqldaBkacR41KxR2Z0jY {
-  --lyrics-color-active:   #ffffff !important;
-  --lyrics-color-inactive: rgba(255,255,255,.55) !important;
-  --lyrics-color-passed:   rgba(255,255,255,.28) !important;
-}
-[data-testid="lyrics-line"] {
-  margin: 0 !important;
-  padding: 1px 0 !important;
-  line-height: 1.45 !important;
-  font-size: clamp(1.25rem, 2.4vw, 2.25rem) !important;
-  overflow-wrap: anywhere !important;
-  user-select: text !important;
-}
-[data-testid="lyrics-line"] ._3s1DGSMxRHUVPuxgkoss {
-  font-size: 1em !important;
-  font-weight: 700 !important;
-  line-height: 1.45 !important;
-  color: rgba(255,255,255,.55) !important;
-  text-shadow: none !important;
-  transition: font-size .3s cubic-bezier(.3,.7,.3,1),
-              color .4s ease, text-shadow .4s ease;
-}
-[data-testid="lyrics-line"].loNizikBbaCKyI9Gv8xg ._3s1DGSMxRHUVPuxgkoss {
-  color: rgba(255,255,255,.28) !important;
-}
-[data-testid="lyrics-line"].dPaa_Hg0z0Ql_UBrV9uZ ._3s1DGSMxRHUVPuxgkoss {
-  font-size: 1.35em !important;
-  font-weight: 800 !important;
-  line-height: 1.32 !important;
-  color: #fff !important;
-  text-shadow: 0 0 18px rgba(255,255,255,.28), 0 2px 6px rgba(0,0,0,.5) !important;
-}
-[data-testid="lyrics-line"].WBNUk2iJWB8WkN8FaBOt {
-  height: 20px !important; min-height: 20px !important; max-height: 20px !important;
-  margin: 0 !important; padding: 0 !important; overflow: hidden !important;
-}
-[data-testid="lyrics-line"].WBNUk2iJWB8WkN8FaBOt ._3s1DGSMxRHUVPuxgkoss {
-  line-height: 0 !important;
-}
-@media (max-width: 768px) {
-  .NAOY0Orzgl4rd4__VtAw { min-height: 100dvh !important; }
-  .l2GQ00sPnkqe8YLHcfzL {
-    padding:
-      calc(8px + env(safe-area-inset-top))
-      max(5%, env(safe-area-inset-right))
-      calc(120px + env(safe-area-inset-bottom))
-      max(5%, env(safe-area-inset-left)) !important;
-  }
-  [data-testid="lyrics-line"] { font-size: clamp(1.15rem, 5.5vw, 1.6rem) !important; }
-  [data-testid="lyrics-line"].WBNUk2iJWB8WkN8FaBOt {
-    height: 18px !important; min-height: 18px !important; max-height: 18px !important;
-  }
-}
-@media (max-height: 480px) and (orientation: landscape) {
-  [data-testid="lyrics-line"] { font-size: clamp(1rem, 4.5vh, 1.3rem) !important; }
-  [data-testid="lyrics-line"].WBNUk2iJWB8WkN8FaBOt {
-    height: 12px !important; min-height: 12px !important; max-height: 12px !important;
-  }
-  .l2GQ00sPnkqe8YLHcfzL { padding-bottom: 80px !important; }
-}
-""".trimIndent()
-
-    // ---------------------------------------------------------------
-    // COMPACT - dense, readable, no glow
-    // ---------------------------------------------------------------
-    private val COMPACT_CSS = """
-/* === COMPACT: small, dense, zero glow === */
-.l2GQ00sPnkqe8YLHcfzL {
-  width: 100% !important;
-  max-width: 100% !important;
-  margin: 0 !important;
-  padding: 8px 5% 120px 5% !important;
-  box-sizing: border-box !important;
-}
-.bqldaBkacR41KxR2Z0jY {
-  --lyrics-color-active:   #ffffff !important;
-  --lyrics-color-inactive: rgba(255,255,255,.5) !important;
-  --lyrics-color-passed:   rgba(255,255,255,.25) !important;
-}
-[data-testid="lyrics-line"] {
-  margin: 0 !important;
-  padding: 1px 0 !important;
-  line-height: 1.35 !important;
-  font-size: clamp(.95rem, 1.9vw, 1.35rem) !important;
-  overflow-wrap: anywhere !important;
-  user-select: text !important;
-}
-[data-testid="lyrics-line"] ._3s1DGSMxRHUVPuxgkoss {
-  font-size: 1em !important;
-  font-weight: 600 !important;
-  line-height: 1.35 !important;
-  color: rgba(255,255,255,.5) !important;
-  text-shadow: none !important;
-  transition: font-size .2s ease, color .3s ease;
-}
-[data-testid="lyrics-line"].loNizikBbaCKyI9Gv8xg ._3s1DGSMxRHUVPuxgkoss {
-  color: rgba(255,255,255,.25) !important;
-}
-[data-testid="lyrics-line"].dPaa_Hg0z0Ql_UBrV9uZ ._3s1DGSMxRHUVPuxgkoss {
-  font-size: 1.12em !important;
-  font-weight: 800 !important;
-  line-height: 1.3 !important;
-  color: #fff !important;
-  text-shadow: none !important;
-}
-[data-testid="lyrics-line"].WBNUk2iJWB8WkN8FaBOt {
-  height: 14px !important; min-height: 14px !important; max-height: 14px !important;
-  margin: 0 !important; padding: 0 !important; overflow: hidden !important;
-}
-[data-testid="lyrics-line"].WBNUk2iJWB8WkN8FaBOt ._3s1DGSMxRHUVPuxgkoss {
-  line-height: 0 !important;
-}
-@media (max-width: 768px) {
-  .NAOY0Orzgl4rd4__VtAw { min-height: 100dvh !important; }
-  .l2GQ00sPnkqe8YLHcfzL {
-    padding:
-      calc(8px + env(safe-area-inset-top))
-      max(5%, env(safe-area-inset-right))
-      calc(110px + env(safe-area-inset-bottom))
-      max(5%, env(safe-area-inset-left)) !important;
-  }
-  [data-testid="lyrics-line"] { font-size: clamp(.9rem, 4.2vw, 1.15rem) !important; }
-  [data-testid="lyrics-line"].WBNUk2iJWB8WkN8FaBOt {
-    height: 12px !important; min-height: 12px !important; max-height: 12px !important;
-  }
-}
-@media (max-height: 480px) and (orientation: landscape) {
-  [data-testid="lyrics-line"] { font-size: clamp(.85rem, 4vh, 1.05rem) !important; }
-  [data-testid="lyrics-line"].WBNUk2iJWB8WkN8FaBOt {
-    height: 10px !important; min-height: 10px !important; max-height: 10px !important;
-  }
-  .l2GQ00sPnkqe8YLHcfzL { padding-bottom: 70px !important; }
-}
-""".trimIndent()
-
-    // ---------------------------------------------------------------
-    // KARAOKE - huge glowing active line, everything else ghosted
-    // ---------------------------------------------------------------
-    private val KARAOKE_CSS = """
-/* === KARAOKE: one giant line at a time === */
-.l2GQ00sPnkqe8YLHcfzL {
-  width: 100% !important;
-  max-width: 100% !important;
-  margin: 0 !important;
-  padding: 8px 5% 150px 5% !important;
-  box-sizing: border-box !important;
-}
-.bqldaBkacR41KxR2Z0jY {
-  --lyrics-color-active:   #ffffff !important;
-  --lyrics-color-inactive: rgba(255,255,255,.22) !important;
-  --lyrics-color-passed:   rgba(255,255,255,.10) !important;
-}
-[data-testid="lyrics-line"] {
-  margin: 0 !important;
-  padding: 2px 0 !important;
-  line-height: 1.45 !important;
-  font-size: clamp(1.2rem, 2.6vw, 2rem) !important;
-  overflow-wrap: anywhere !important;
-  user-select: text !important;
-}
-[data-testid="lyrics-line"] ._3s1DGSMxRHUVPuxgkoss {
-  font-size: 1em !important;
-  font-weight: 700 !important;
-  line-height: 1.45 !important;
-  color: rgba(255,255,255,.22) !important;
-  text-shadow: none !important;
-  transition: font-size .35s cubic-bezier(.3,.7,.3,1),
-              color .4s ease, text-shadow .4s ease;
-}
-[data-testid="lyrics-line"].loNizikBbaCKyI9Gv8xg ._3s1DGSMxRHUVPuxgkoss {
-  color: rgba(255,255,255,.10) !important;
-}
-[data-testid="lyrics-line"].dPaa_Hg0z0Ql_UBrV9uZ ._3s1DGSMxRHUVPuxgkoss {
-  font-size: 1.55em !important;
-  font-weight: 900 !important;
-  line-height: 1.28 !important;
-  color: #fff !important;
-  text-shadow: 0 0 30px rgba(255,255,255,.45), 0 2px 8px rgba(0,0,0,.55) !important;
-}
-[data-testid="lyrics-line"].WBNUk2iJWB8WkN8FaBOt {
-  height: 22px !important; min-height: 22px !important; max-height: 22px !important;
-  margin: 0 !important; padding: 0 !important; overflow: hidden !important;
-}
-[data-testid="lyrics-line"].WBNUk2iJWB8WkN8FaBOt ._3s1DGSMxRHUVPuxgkoss {
-  line-height: 0 !important;
-}
-@media (max-width: 768px) {
-  .NAOY0Orzgl4rd4__VtAw { min-height: 100dvh !important; }
-  .l2GQ00sPnkqe8YLHcfzL {
-    padding:
-      calc(8px + env(safe-area-inset-top))
-      max(5%, env(safe-area-inset-right))
-      calc(130px + env(safe-area-inset-bottom))
-      max(5%, env(safe-area-inset-left)) !important;
-  }
-  [data-testid="lyrics-line"] { font-size: clamp(1.1rem, 5vw, 1.6rem) !important; }
-  [data-testid="lyrics-line"].WBNUk2iJWB8WkN8FaBOt {
-    height: 18px !important; min-height: 18px !important; max-height: 18px !important;
-  }
-}
-@media (max-height: 480px) and (orientation: landscape) {
-  [data-testid="lyrics-line"] { font-size: clamp(1rem, 4.5vh, 1.35rem) !important; }
-  [data-testid="lyrics-line"].WBNUk2iJWB8WkN8FaBOt {
-    height: 12px !important; min-height: 12px !important; max-height: 12px !important;
-  }
-  .l2GQ00sPnkqe8YLHcfzL { padding-bottom: 90px !important; }
-}
-""".trimIndent()
-
-    // ---------------------------------------------------------------
-    // BOLD - everything big & heavy, uniform size, brightness differs
-    // ---------------------------------------------------------------
-    private val BOLD_CSS = """
-/* === BOLD: all lines large, active just brighter === */
-.l2GQ00sPnkqe8YLHcfzL {
-  width: 100% !important;
-  max-width: 100% !important;
-  margin: 0 !important;
-  padding: 8px 5% 140px 5% !important;
-  box-sizing: border-box !important;
-}
-.bqldaBkacR41KxR2Z0jY {
-  --lyrics-color-active:   #ffffff !important;
-  --lyrics-color-inactive: rgba(255,255,255,.72) !important;
-  --lyrics-color-passed:   rgba(255,255,255,.42) !important;
-}
-[data-testid="lyrics-line"] {
-  margin: 0 !important;
-  padding: 1px 0 !important;
-  line-height: 1.5 !important;
-  font-size: clamp(1.3rem, 2.8vw, 2.4rem) !important;
-  overflow-wrap: anywhere !important;
-  user-select: text !important;
-}
-[data-testid="lyrics-line"] ._3s1DGSMxRHUVPuxgkoss {
-  font-size: 1em !important;
-  font-weight: 800 !important;
-  line-height: 1.5 !important;
-  color: rgba(255,255,255,.72) !important;
-  text-shadow: none !important;
-  transition: color .4s ease, text-shadow .4s ease;
-}
-[data-testid="lyrics-line"].loNizikBbaCKyI9Gv8xg ._3s1DGSMxRHUVPuxgkoss {
-  color: rgba(255,255,255,.42) !important;
-}
-[data-testid="lyrics-line"].dPaa_Hg0z0Ql_UBrV9uZ ._3s1DGSMxRHUVPuxgkoss {
-  color: #fff !important;
-  text-shadow: 0 2px 10px rgba(0,0,0,.6) !important;
-}
-[data-testid="lyrics-line"].WBNUk2iJWB8WkN8FaBOt {
-  height: 20px !important; min-height: 20px !important; max-height: 20px !important;
-  margin: 0 !important; padding: 0 !important; overflow: hidden !important;
-}
-[data-testid="lyrics-line"].WBNUk2iJWB8WkN8FaBOt ._3s1DGSMxRHUVPuxgkoss {
-  line-height: 0 !important;
-}
-@media (max-width: 768px) {
-  .NAOY0Orzgl4rd4__VtAw { min-height: 100dvh !important; }
-  .l2GQ00sPnkqe8YLHcfzL {
-    padding:
-      calc(8px + env(safe-area-inset-top))
-      max(5%, env(safe-area-inset-right))
-      calc(120px + env(safe-area-inset-bottom))
-      max(5%, env(safe-area-inset-left)) !important;
-  }
-  [data-testid="lyrics-line"] { font-size: clamp(1.2rem, 5.8vw, 1.75rem) !important; }
-  [data-testid="lyrics-line"].WBNUk2iJWB8WkN8FaBOt {
-    height: 16px !important; min-height: 16px !important; max-height: 16px !important;
-  }
-}
-@media (max-height: 480px) and (orientation: landscape) {
-  [data-testid="lyrics-line"] { font-size: clamp(1.05rem, 4.8vh, 1.4rem) !important; }
-  [data-testid="lyrics-line"].WBNUk2iJWB8WkN8FaBOt {
-    height: 12px !important; min-height: 12px !important; max-height: 12px !important;
-  }
-  .l2GQ00sPnkqe8YLHcfzL { padding-bottom: 80px !important; }
-}
-""".trimIndent()
+    private fun num(value: Float): String = String.format(Locale.US, "%.3f", value)
 }

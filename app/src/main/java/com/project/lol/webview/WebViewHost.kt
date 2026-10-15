@@ -128,6 +128,8 @@ object WebViewHost {
         webView = null
         bridge = null
         try {
+            (view.webViewClient as? SpotifyWebViewClient)?.dispose()
+            (view.webChromeClient as? SpotifyWebChromeClient)?.cleanup()
             view.stopLoading()
             view.removeJavascriptInterface("AndBridge")
             if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_VIEW_RENDERER_TERMINATE)) {

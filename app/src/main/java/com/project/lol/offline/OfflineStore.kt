@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import com.project.lol.offline.lyrics.LyricsStore
 import com.project.lol.util.Logger
 import org.json.JSONObject
 import java.io.File
@@ -27,6 +28,8 @@ data class OfflineSong(
     val ytAlbum: String = "",
     val ytThumbnail: String? = null,
     val shareLink: String? = null,
+    val year: Int? = null,
+    val format: String = "",
 )
 
 object OfflineStore {
@@ -62,6 +65,7 @@ object OfflineStore {
         durationSec: Int? = null,
         explicit: Boolean = false,
         shareLink: String? = null,
+        year: Int? = null,
     ) {
         runCatching {
             val file = metaFile(context)
@@ -85,6 +89,7 @@ object OfflineStore {
                     if (durationSec != null) put("durationSec", durationSec)
                     if (explicit) put("explicit", true)
                     if (shareLink != null) put("shareLink", shareLink)
+                    if (year != null) put("year", year)
                 }
             )
             file.writeText(root.toString())
@@ -114,6 +119,7 @@ object OfflineStore {
             file.writeText(root.toString())
         }
         runCatching { File(coverDir(context), "$trackId.jpg").delete() }
+        LyricsStore.delete(context, trackId)
     }
 
     fun loadSongs(context: Context): List<OfflineSong> {
@@ -138,6 +144,7 @@ object OfflineStore {
                         title = match.groupValues[2].trim().ifBlank { entry.name },
                         artist = match.groupValues[1].trim(),
                         uri = entry.uri,
+                        format = entry.name.substringAfterLast('.', "").lowercase(),
                     )
                 )
             }
@@ -152,6 +159,7 @@ object OfflineStore {
                 MediaStore.Audio.Media.ARTIST,
                 MediaStore.Audio.Media.DISPLAY_NAME,
                 MediaStore.Audio.Media.IS_PENDING,
+                MediaStore.Audio.Media.YEAR,
             )
             context.contentResolver.query(
                 collection,
@@ -190,6 +198,8 @@ object OfflineStore {
                                 title = title,
                                 artist = artist,
                                 uri = uri,
+                                format = displayName.substringAfterLast('.', "").lowercase(),
+                                year = if (c.isNull(5)) null else c.getInt(5).takeIf { it > 0 },
                             )
                         )
                     }
@@ -215,9 +225,13 @@ object OfflineStore {
                         title = title,
                         artist = artist,
                         uri = Uri.fromFile(f),
+                        format = f.extension.lowercase(),
                     )
                 )
             }
+        }
+        for (imported in LocalImportStore.loadSongs(context)) {
+            if (seen.add(imported.id)) songs.add(imported)
         }
         return songs
     }
@@ -229,6 +243,8 @@ object OfflineStore {
         title: String,
         artist: String,
         uri: Uri,
+        format: String = "",
+        year: Int? = null,
     ): OfflineSong {
         val extras = manifest.optJSONObject(trackId)
         return OfflineSong(
@@ -246,6 +262,8 @@ object OfflineStore {
             ytAlbum = extras?.optString("ytAlbum", "") ?: "",
             ytThumbnail = extras?.optString("ytThumb", "")?.ifBlank { null },
             shareLink = extras?.optString("shareLink", "")?.ifBlank { null },
+            year = year ?: extras?.optInt("year", 0)?.takeIf { it > 0 },
+            format = format,
         )
     }
 
@@ -260,6 +278,7 @@ object OfflineStore {
             Logger.w(TAG, "deleteSong: failed to delete ${song.uri}: ${it.message}")
             false
         }
+        runCatching { LyricsStore.deleteSidecar(context, LyricsStore.sidecarName(song.artist, song.title, song.id)) }
         removeMetadata(context, song.id)
         return ok
     }

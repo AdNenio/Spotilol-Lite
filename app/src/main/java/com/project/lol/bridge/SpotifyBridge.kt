@@ -1,6 +1,8 @@
 package com.project.lol.bridge
 
 import android.app.Activity
+import android.os.Handler
+import android.os.Looper
 import android.view.View
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
@@ -17,6 +19,7 @@ import java.util.Locale
 import com.project.lol.offline.DownloadManager
 import com.project.lol.spicy.SpicyLyricsClient
 import com.project.lol.util.Logger
+import com.project.lol.webview.helpers.NavToken
 
 class SpotifyBridge(activityRef: WeakReference<Activity>) {
 
@@ -37,7 +40,9 @@ class SpotifyBridge(activityRef: WeakReference<Activity>) {
         private const val CALL = "bridge.call"
     }
 
+    @Volatile
     private var activityRef = activityRef
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     fun rebind(ref: WeakReference<Activity>) {
         activityRef = ref
@@ -47,6 +52,7 @@ class SpotifyBridge(activityRef: WeakReference<Activity>) {
     var onMediaStatus: ((String) -> Unit)? = null
     var onMediaPosition: ((Long) -> Unit)? = null
     var onTimerDialogRequest: (() -> Unit)? = null
+    var onVolumeDialogRequest: (() -> Unit)? = null
     var onEnterPipRequest: (() -> Unit)? = null
     var onEnterPipVideoRequest: ((Int, Int) -> Unit)? = null
     var onEnterVideoFullscreen: (() -> Unit)? = null
@@ -130,9 +136,14 @@ class SpotifyBridge(activityRef: WeakReference<Activity>) {
             val v = arr.optString(i, "")
             if (v.isNotEmpty()) ids.add(v)
         }
-        if (ids.isNotEmpty()) {
-            AdIdStore.addAll(ids)
-            Logger.d(CALL, "recAdContentIds: ${ids.size}")
+        if (ids.isEmpty()) return
+        val token = NavToken.current()
+        mainHandler.post {
+            if (token != NavToken.current()) {
+                Logger.d(CALL, "recAdContentIds: dropped ${ids.size} stale ids")
+                return@post
+            }
+            if (AdIdStore.addAll(ids)) Logger.d(CALL, "recAdContentIds: ${ids.size}")
         }
     }
 
@@ -202,6 +213,15 @@ class SpotifyBridge(activityRef: WeakReference<Activity>) {
         Logger.d(CALL, "openTimerDialog")
         activity.runOnUiThread {
             onTimerDialogRequest?.invoke()
+        }
+    }
+
+    @JavascriptInterface
+    fun openVolumeDialog() {
+        val activity = activityRef.get() ?: return
+        Logger.d(CALL, "openVolumeDialog")
+        activity.runOnUiThread {
+            onVolumeDialogRequest?.invoke()
         }
     }
 

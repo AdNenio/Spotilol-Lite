@@ -39,7 +39,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
@@ -62,8 +61,6 @@ fun SettingsDialog(
     visible: Boolean,
     onClose: () -> Unit,
     prefs: SharedPreferences,
-    materialYou: Boolean,
-    onMaterialYouChange: (Boolean) -> Unit,
     amoledThemeState: Boolean,
     onAmoledThemeChange: (Boolean) -> Unit,
     hideTopBar: Boolean,
@@ -72,10 +69,6 @@ fun SettingsDialog(
     onLandscapeModeChange: (Boolean) -> Unit,
     keepScreenOn: Boolean,
     onKeepScreenOnChange: (Boolean) -> Unit,
-    themePreset: String,
-    onThemePresetChange: (String) -> Unit,
-    themeSecondary: Color?,
-    onThemeSecondaryChange: (Color?) -> Unit,
     onSaveProfile: (String, String) -> Unit,
     onLoadProfile: (String) -> Unit,
     onDeleteProfile: (String) -> Unit,
@@ -148,8 +141,6 @@ fun SettingsDialog(
                                     SettingsContent(
                                         modifier = Modifier.weight(1f),
                                         prefs = prefs,
-                                        materialYou = materialYou,
-                                        onMaterialYouChange = onMaterialYouChange,
                                         amoledThemeState = amoledThemeState,
                                         onAmoledThemeChange = onAmoledThemeChange,
                                         hideTopBar = hideTopBar,
@@ -158,10 +149,6 @@ fun SettingsDialog(
                                         onLandscapeModeChange = onLandscapeModeChange,
                                         keepScreenOn = keepScreenOn,
                                         onKeepScreenOnChange = onKeepScreenOnChange,
-                                        themePreset = themePreset,
-                                        onThemePresetChange = onThemePresetChange,
-                                        themeSecondary = themeSecondary,
-                                        onThemeSecondaryChange = onThemeSecondaryChange,
                                         onSaveProfile = onSaveProfile,
                                         onLoadProfile = onLoadProfile,
                                         onDeleteProfile = onDeleteProfile,

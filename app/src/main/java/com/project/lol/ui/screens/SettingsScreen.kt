@@ -12,7 +12,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -112,13 +111,6 @@ import com.project.lol.ui.lyrics.CustomLyricsPresets
 import com.project.lol.ui.lyrics.LyricsPreset
 import com.project.lol.ui.lyrics.LyricsPresetShare
 import com.project.lol.ui.theme.SpotifyTheme
-import com.project.lol.ui.theme.ThemeController
-import com.project.lol.ui.theme.ThemeHarmony
-import com.project.lol.ui.theme.ThemePalette
-import com.project.lol.ui.theme.ThemePreset
-import com.project.lol.ui.theme.ThemePresets
-import com.project.lol.ui.theme.ThemeShare
-import com.project.lol.ui.theme.harmonized
 import com.project.lol.util.AppLocale
 import com.project.lol.util.BatterySaver
 import com.project.lol.util.BuildInfo
@@ -146,7 +138,6 @@ import compose.icons.tablericons.ChevronRight
 import compose.icons.tablericons.Click
 import compose.icons.tablericons.CloudOff
 import compose.icons.tablericons.Code
-import compose.icons.tablericons.ColorSwatch
 import compose.icons.tablericons.Copy
 import compose.icons.tablericons.Database
 import compose.icons.tablericons.DeviceMobile
@@ -170,7 +161,6 @@ import compose.icons.tablericons.Plus
 import compose.icons.tablericons.Power
 import compose.icons.tablericons.Rocket
 import compose.icons.tablericons.RotateClockwise2
-import compose.icons.tablericons.Search
 import compose.icons.tablericons.Shield
 import compose.icons.tablericons.Terminal2
 import compose.icons.tablericons.Trash
@@ -185,7 +175,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
-import kotlin.math.abs
 
 private const val DEBUG_UNLOCK_TAPS = 5
 private const val LOGGER_WIDE_BREAKPOINT = 600
@@ -206,8 +195,6 @@ private enum class SettingsTab(@StringRes val labelRes: Int) {
 fun SettingsContent(
     modifier: Modifier = Modifier,
     prefs: SharedPreferences,
-    materialYou: Boolean,
-    onMaterialYouChange: (Boolean) -> Unit,
     amoledThemeState: Boolean,
     onAmoledThemeChange: (Boolean) -> Unit,
     hideTopBar: Boolean,
@@ -216,10 +203,6 @@ fun SettingsContent(
     onLandscapeModeChange: (Boolean) -> Unit,
     keepScreenOn: Boolean,
     onKeepScreenOnChange: (Boolean) -> Unit,
-    themePreset: String,
-    onThemePresetChange: (String) -> Unit,
-    themeSecondary: Color?,
-    onThemeSecondaryChange: (Color?) -> Unit,
     onSaveProfile: (String, String) -> Unit,
     onLoadProfile: (String) -> Unit,
     onDeleteProfile: (String) -> Unit,
@@ -273,7 +256,6 @@ fun SettingsContent(
     // dead code: the gui mode selector was removed, keep the flag for the wide window refactor
     // var showGuiModeDialog by remember { mutableStateOf(false) }
     var showCustomCssDialog by remember { mutableStateOf(false) }
-    var showThemeDialog by remember { mutableStateOf(false) }
     var showChangelogDialog by remember { mutableStateOf(false) }
     var loggingOn by remember { mutableStateOf(Logger.isEnabled()) }
     var showDevlogDialog by remember { mutableStateOf(false) }
@@ -406,40 +388,6 @@ fun SettingsContent(
                         subtitle = if (customCss.isBlank()) stringResource(R.string.settings_custom_css_none) else customCss,
                         icon = TablerIcons.Code,
                         onClick = { showCustomCssDialog = true }
-                    )
-
-                    HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-
-                    SettingSwitchTile(
-                        title = stringResource(R.string.settings_material_you),
-                        subtitle = stringResource(R.string.settings_material_you_subtitle),
-                        icon = TablerIcons.ColorSwatch,
-                        checked = materialYou,
-                        onCheckedChange = { enabled ->
-                            onMaterialYouChange(enabled)
-                            prefs.edit().putBoolean("MaterialYou", enabled).apply()
-                        }
-                    )
-
-                    HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-
-                    val themeLabel = ThemePresets.byId[themePreset]?.let { "${it.family} · ${it.name}" }
-                        ?: themePreset
-                    SettingTile(
-                        title = stringResource(R.string.settings_theme),
-                        subtitle = if (materialYou) stringResource(R.string.settings_theme_dynamic) else themeLabel,
-                        icon = TablerIcons.ColorSwatch,
-                        onClick = { showThemeDialog = true }
-                    )
-
-                    HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-
-                    SettingTile(
-                        title = stringResource(R.string.settings_theme_secondary),
-                        subtitle = themeSecondary?.let { ThemeHarmony.toHex(it) }
-                            ?: stringResource(R.string.settings_theme_secondary_auto),
-                        icon = TablerIcons.Brush,
-                        onClick = { showThemeDialog = true }
                     )
 
                     HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
@@ -944,20 +892,6 @@ fun SettingsContent(
         }
     }
 
-    if (showThemeDialog) {
-        ThemeDialog(
-            currentPreset = themePreset,
-            currentSecondary = themeSecondary,
-            onSelect = { id ->
-                onThemePresetChange(id)
-            },
-            onSecondaryChange = { color ->
-                onThemeSecondaryChange(color)
-            },
-            onDismiss = { showThemeDialog = false }
-        )
-    }
-
     if (showLanguageDialog) {
         LanguageDialog(
             current = appLanguage,
@@ -1250,523 +1184,6 @@ private fun DeviceInfoExportTile() {
             }
         }
     )
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-fun ThemeDialog(
-    currentPreset: String,
-    currentSecondary: Color?,
-    onSelect: (String) -> Unit,
-    onSecondaryChange: (Color?) -> Unit,
-    onDismiss: () -> Unit
-) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var query by remember { mutableStateOf("") }
-    var selected by remember { mutableStateOf(currentPreset) }
-    var secondary by remember { mutableStateOf(currentSecondary) }
-    var editing by remember { mutableStateOf(false) }
-    val hueState = rememberSliderState(
-        value = currentSecondary?.let { ThemeHarmony.hueOf(it) }
-            ?: ThemeHarmony.hueOf(ThemePresets.resolve(currentPreset).alt),
-        trackRange = 0f..360f
-    )
-    val strengthState = rememberSliderState(value = 1f, trackRange = 0f..1f)
-
-    val basePalette = ThemePresets.resolve(selected)
-    val pending = if (editing) ThemeHarmony.harmonize(basePalette.alt, hueState.value, strengthState.value) else secondary
-    val previewPalette = basePalette.harmonized(pending)
-    val previewPreset = ThemePresets.find(selected)
-    val suggestions = ThemeHarmony.suggestedHues(basePalette)
-    val activeHue = pending?.let { ThemeHarmony.hueOf(it) }
-
-    fun applySecondary(nextHue: Float, nextStrength: Float, commit: Boolean) {
-        hueState.value = nextHue
-        strengthState.value = nextStrength
-        editing = true
-        if (commit) {
-            val color = ThemeHarmony.harmonize(basePalette.alt, nextHue, nextStrength)
-            secondary = color
-            onSecondaryChange(color)
-        }
-    }
-
-    fun resetSecondary() {
-        editing = false
-        secondary = null
-        hueState.value = ThemeHarmony.hueOf(basePalette.alt)
-        onSecondaryChange(null)
-    }
-
-    val exportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument(ThemeShare.MIME_TYPE)
-    ) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        val preset = ThemePresets.find(selected) ?: return@rememberLauncherForActivityResult
-        scope.launch {
-            val payload = ThemeShare.encode(listOf(preset.copy(palette = preset.palette.harmonized(secondary))))
-            val done = runCatching {
-                withContext(Dispatchers.IO) { ThemeShare.write(context, uri, payload) }
-            }.isSuccess
-            Toast.makeText(
-                context,
-                if (done) R.string.theme_export_done else R.string.theme_export_failed,
-                Toast.LENGTH_SHORT
-            ).show()
-        }
-    }
-
-    val importLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        scope.launch {
-            val result = runCatching {
-                val payload = withContext(Dispatchers.IO) { ThemeShare.read(context, uri) }
-                ThemeShare.decode(payload)
-            }
-            result.onSuccess { themes ->
-                val imported = ThemeController.importThemes(themes)
-                imported.firstOrNull()?.let { first ->
-                    selected = first.id
-                    editing = false
-                    secondary = null
-                    hueState.value = ThemeHarmony.hueOf(first.palette.alt)
-                    onSecondaryChange(null)
-                    onSelect(first.id)
-                }
-                Toast.makeText(
-                    context,
-                    context.getString(R.string.theme_import_done, imported.size),
-                    Toast.LENGTH_SHORT
-                ).show()
-            }.onFailure {
-                Toast.makeText(context, R.string.theme_import_failed, Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    val visiblePresets = query.trim().let { raw ->
-        if (raw.isBlank()) ThemePresets.all
-        else ThemePresets.all.filter {
-            it.family.contains(raw, true) || it.name.contains(raw, true) || it.id.contains(raw, true)
-        }
-    }
-
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth(0.95f)
-                .fillMaxHeight(0.88f),
-            shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            tonalElevation = 6.dp
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = TablerIcons.Palette,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(Modifier.width(10.dp))
-                    Text(
-                        text = stringResource(R.string.settings_theme),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.weight(1f)
-                    )
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
-                        Icon(
-                            imageVector = TablerIcons.X,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
-
-                Spacer(Modifier.height(12.dp))
-
-                Row(modifier = Modifier.weight(1f)) {
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                    ) {
-                        OutlinedTextField(
-                            value = query,
-                            onValueChange = { query = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            leadingIcon = {
-                                Icon(TablerIcons.Search, contentDescription = null, modifier = Modifier.size(16.dp))
-                            },
-                            placeholder = {
-                                Text(
-                                    text = stringResource(R.string.theme_search),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    maxLines = 1
-                                )
-                            },
-                            textStyle = MaterialTheme.typography.bodySmall,
-                            shape = RoundedCornerShape(14.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
-                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
-                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f)
-                            )
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        if (visiblePresets.isEmpty()) {
-                            Text(
-                                text = stringResource(R.string.theme_no_results),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        } else {
-                            LazyColumn(
-                                modifier = Modifier.fillMaxSize(),
-                                verticalArrangement = Arrangement.spacedBy(2.dp)
-                            ) {
-                                items(visiblePresets, key = { it.id }) { preset ->
-                                    ThemePresetRow(
-                                        preset = preset,
-                                        selected = preset.id == selected,
-                                        custom = ThemePresets.isCustom(preset.id),
-                                        onClick = {
-                                            selected = preset.id
-                                            editing = false
-                                            hueState.value = ThemeHarmony.hueOf(secondary ?: preset.palette.alt)
-                                            onSelect(preset.id)
-                                        },
-                                        onDelete = {
-                                            ThemeController.removeCustomTheme(preset.id)
-                                            if (selected == preset.id) {
-                                                selected = ThemePresets.DEFAULT_ID
-                                                editing = false
-                                                secondary = null
-                                                onSecondaryChange(null)
-                                                onSelect(ThemePresets.DEFAULT_ID)
-                                            }
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .padding(horizontal = 10.dp)
-                            .width(1.dp)
-                            .fillMaxHeight()
-                            .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
-                    )
-
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .verticalScroll(rememberScrollState())
-                    ) {
-                        Text(
-                            text = stringResource(R.string.theme_preview),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(Modifier.height(6.dp))
-                        ThemePreviewCard(
-                            palette = previewPalette,
-                            title = previewPreset?.family ?: selected,
-                            subtitle = previewPreset?.name ?: selected
-                        )
-
-                        Spacer(Modifier.height(14.dp))
-                        Text(
-                            text = stringResource(R.string.theme_secondary_title),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            text = stringResource(R.string.theme_secondary_hint),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(Modifier.height(8.dp))
-
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            suggestions.forEach { suggestion ->
-                                val active = activeHue != null && abs(activeHue - suggestion) < 8f
-                                Box(
-                                    modifier = Modifier
-                                        .size(26.dp)
-                                        .clip(CircleShape)
-                                        .background(ThemeHarmony.harmonize(basePalette.alt, suggestion, strengthState.value))
-                                        .border(
-                                            width = if (active) 2.dp else 1.dp,
-                                            color = if (active) MaterialTheme.colorScheme.primary
-                                            else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
-                                            shape = CircleShape
-                                        )
-                                        .clickable { applySecondary(suggestion, strengthState.value, true) }
-                                )
-                            }
-                        }
-
-                        Spacer(Modifier.height(10.dp))
-                        Text(
-                            text = stringResource(R.string.theme_hue),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Slider(
-                            state = hueState,
-                            onValueChange = { applySecondary(it, strengthState.value, false) },
-                            onValueChangeFinished = { applySecondary(hueState.value, strengthState.value, true) },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Text(
-                            text = stringResource(R.string.theme_strength),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Slider(
-                            state = strengthState,
-                            onValueChange = { applySecondary(hueState.value, it, false) },
-                            onValueChangeFinished = { applySecondary(hueState.value, strengthState.value, true) },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            TextButton(onClick = { resetSecondary() }, enabled = pending != null) {
-                                Text(
-                                    text = stringResource(R.string.theme_secondary_reset),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
-
-                        Spacer(Modifier.height(10.dp))
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(1.dp)
-                                .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
-                        )
-                        Spacer(Modifier.height(12.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            OutlinedButton(
-                                onClick = {
-                                    val preset = ThemePresets.find(selected) ?: return@OutlinedButton
-                                    exportLauncher.launch(ThemeShare.fileName(preset.family, preset.name))
-                                },
-                                modifier = Modifier.weight(1f),
-                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
-                            ) {
-                                Icon(TablerIcons.FileUpload, contentDescription = null, modifier = Modifier.size(14.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text(
-                                    text = stringResource(R.string.theme_export),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                            OutlinedButton(
-                                onClick = { importLauncher.launch(arrayOf(ThemeShare.MIME_TYPE, "*/*")) },
-                                modifier = Modifier.weight(1f),
-                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
-                            ) {
-                                Icon(TablerIcons.FileDownload, contentDescription = null, modifier = Modifier.size(14.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text(
-                                    text = stringResource(R.string.theme_import),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ThemePresetRow(
-    preset: ThemePreset,
-    selected: Boolean,
-    custom: Boolean,
-    onClick: () -> Unit,
-    onDelete: () -> Unit
-) {
-    val subtitle = if (custom) "${preset.name} · ${stringResource(R.string.theme_custom)}" else preset.name
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (selected) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent)
-            .clickable(onClick = onClick)
-            .padding(start = 8.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(26.dp)
-                .clip(CircleShape)
-                .background(preset.palette.accent)
-                .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), CircleShape)
-        )
-        Spacer(Modifier.width(10.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = preset.family,
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        if (custom) {
-            IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
-                Icon(
-                    imageVector = TablerIcons.Trash,
-                    contentDescription = stringResource(R.string.theme_delete),
-                    tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.size(15.dp)
-                )
-            }
-        } else if (selected) {
-            Icon(
-                imageVector = TablerIcons.Check,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(16.dp)
-            )
-            Spacer(Modifier.width(6.dp))
-        }
-    }
-}
-
-@Composable
-private fun ThemePreviewCard(
-    palette: ThemePalette,
-    title: String,
-    subtitle: String
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(palette.bg)
-            .border(1.dp, palette.outline, RoundedCornerShape(16.dp))
-            .padding(10.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size(22.dp)
-                    .clip(CircleShape)
-                    .background(palette.accent)
-            )
-            Spacer(Modifier.width(8.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = palette.fg,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = palette.fgMuted,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .size(22.dp)
-                    .clip(CircleShape)
-                    .background(palette.alt)
-            )
-        }
-        Spacer(Modifier.height(10.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            listOf(
-                palette.bg,
-                palette.panel,
-                palette.panelHigh,
-                palette.accent,
-                palette.alt,
-                palette.fg,
-                palette.fgMuted,
-                palette.outline
-            ).forEach { swatch ->
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(14.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(swatch)
-                )
-            }
-        }
-        Spacer(Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            ThemePreviewChip("Aa", palette.accent, palette.onAccent)
-            ThemePreviewChip("Aa", palette.alt, palette.onAlt)
-            ThemePreviewChip("Aa", palette.panelHigh, palette.fg)
-        }
-    }
-}
-
-@Composable
-private fun ThemePreviewChip(label: String, background: Color, foreground: Color) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(background)
-            .padding(horizontal = 10.dp, vertical = 4.dp)
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = foreground
-        )
-    }
 }
 
 @Composable
@@ -2898,8 +2315,6 @@ fun SettingsContentPreview() {
         SettingsContent(
             modifier = Modifier.fillMaxSize(),
             prefs = prefs,
-            materialYou = false,
-            onMaterialYouChange = {},
             amoledThemeState = false,
             onAmoledThemeChange = {},
             hideTopBar = false,
@@ -2908,10 +2323,6 @@ fun SettingsContentPreview() {
             onLandscapeModeChange = {},
             keepScreenOn = false,
             onKeepScreenOnChange = {},
-            themePreset = ThemePresets.DEFAULT_ID,
-            onThemePresetChange = {},
-            themeSecondary = null,
-            onThemeSecondaryChange = {},
             onSaveProfile = { _, _ -> },
             onLoadProfile = {},
             onDeleteProfile = {},

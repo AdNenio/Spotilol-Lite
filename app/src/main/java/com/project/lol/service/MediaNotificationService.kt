@@ -10,7 +10,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.SharedPreferences
 import android.content.pm.ServiceInfo
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -43,7 +42,6 @@ import androidx.core.graphics.drawable.IconCompat
 import androidx.core.graphics.scale
 import androidx.core.graphics.toColorInt
 import com.project.lol.util.AppLocale
-import com.project.lol.ui.theme.ThemeController
 import com.project.lol.util.Logger
 import java.lang.ref.WeakReference
 import java.net.HttpURLConnection
@@ -64,6 +62,7 @@ class MediaNotificationService : Service() {
         private const val CHANNEL_ID = "spotilol_media_playback"
         private const val NOTIFICATION_ID = 1
         private val mainHandler = Handler(Looper.getMainLooper())
+        private const val WAKE_LOCK_RENEW_MS = 10 * 60 * 1000L
 
         const val ACTION_PLAY_PAUSE = "com.project.lol.ACTION_PLAY_PAUSE"
         const val ACTION_NEXT = "com.project.lol.ACTION_NEXT"
@@ -75,8 +74,6 @@ class MediaNotificationService : Service() {
         private const val CUSTOM_ACTION_TOGGLE_FAV = "toggle_fav"
         private const val CUSTOM_ACTION_TOGGLE_SHUFFLE = "toggle_shuffle"
         private const val CUSTOM_ACTION_REPEAT = "toggle_repeat"
-
-        private const val WAKE_LOCK_RENEW_MS = 10 * 60 * 1000L
 
         private val PLAYBACK_ACTIONS: Long =
             PlaybackStateCompat.ACTION_PLAY or
@@ -223,16 +220,6 @@ class MediaNotificationService : Service() {
     }
 
     private var firstHeadsetCallback = true
-    private var accentCache = 0
-
-    private val prefsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key == "ThemePreset" || key == "MaterialYou") {
-            accentCache = 0
-            mainHandler.post {
-                showNotification()
-            }
-        }
-    }
 
     private val headsetReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -250,16 +237,7 @@ class MediaNotificationService : Service() {
         }
     }
 
-    private fun accent(): Int {
-        if (accentCache == 0) {
-            accentCache = try {
-                ThemeController.accentHex(this).toColorInt()
-            } catch (_: Exception) {
-                0xFFE0E0E0.toInt()
-            }
-        }
-        return accentCache
-    }
+    private fun accent(): Int = 0xFF7FC79A.toInt()
 
     private fun tintedIcon(resId: Int): IconCompat {
         val d = AppCompatResources.getDrawable(this, resId)!!.mutate()
@@ -315,8 +293,6 @@ class MediaNotificationService : Service() {
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to register nav prompt callback", e)
         }
-        getSharedPreferences("spotilol_prefs", MODE_PRIVATE)
-            .registerOnSharedPreferenceChangeListener(prefsListener)
         Logger.i(TAG, "media service ready: session, notification and receivers up")
     }
 
@@ -384,8 +360,6 @@ class MediaNotificationService : Service() {
         try { getSystemService(AudioManager::class.java).unregisterAudioDeviceCallback(audioRouteCallback) } catch (_: Exception) {}
         try { getSystemService(AudioManager::class.java).unregisterAudioPlaybackCallback(navPromptCallback) } catch (_: Exception) {}
         mainHandler.removeCallbacks(navUnduckRunnable)
-        getSharedPreferences("spotilol_prefs", MODE_PRIVATE)
-            .unregisterOnSharedPreferenceChangeListener(prefsListener)
         if (::mediaSession.isInitialized) {
             try { mediaSession.isActive = false } catch (_: Exception) {}
             try { mediaSession.release() } catch (_: Exception) {}

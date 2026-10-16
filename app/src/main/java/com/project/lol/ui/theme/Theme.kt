@@ -1,26 +1,18 @@
 package com.project.lol.ui.theme
 
-import android.os.Build
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 
 private const val THEME_ANIMATION_DURATION = 450
 
 @Composable
 fun SpotifyTheme(content: @Composable () -> Unit) {
-    val context = LocalContext.current
-    val target = if (ThemeController.dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        dynamicDarkColorScheme(context)
-    } else {
-        ThemeController.resolvePalette().toColorScheme()
-    }
+    val target = DEFAULT_PALETTE.toColorScheme()
     val colorScheme = if (ThemeController.amoled) target.amoledScheme() else target
 
     MaterialTheme(

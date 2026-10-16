@@ -110,8 +110,6 @@ import com.project.lol.ui.components.SettingsDialog
 import com.project.lol.ui.components.SleepTimerDialog
 import com.project.lol.ui.theme.SpotifyTheme
 import com.project.lol.ui.theme.ThemeController
-import com.project.lol.ui.theme.ThemeHarmony
-import com.project.lol.ui.theme.ThemePresets
 import com.project.lol.util.AppLocale
 import com.project.lol.util.BatterySaver
 import com.project.lol.util.BuildInfo
@@ -164,15 +162,12 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
     private val pipVideoActive = mutableStateOf(false)
 
     private val serviceEnabledState = mutableStateOf(true)
-    private val materialYouState = mutableStateOf(false)
     private val amoledState = mutableStateOf(false)
     private val hideTopBarState = mutableStateOf(false)
     private val landscapeModeState = mutableStateOf(false)
     private val wideVideoState = mutableStateOf(false)
     private val videoFullscreenState = mutableStateOf(false)
     private val keepScreenOnState = mutableStateOf(false)
-    private val themePresetState = mutableStateOf(ThemePresets.DEFAULT_ID)
-    private val themeSecondaryState = mutableStateOf<Color?>(null)
 
     private val showSleepTimerDialog = mutableStateOf(false)
     private val showBatteryDialog = mutableStateOf(false)
@@ -222,13 +217,10 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
         val loggedIn = prefs.getBoolean("LoggedIn", false)
 
         serviceEnabledState.value = prefs.getBoolean("ServiceOn", true)
-        materialYouState.value = prefs.getBoolean("MaterialYou", false)
         amoledState.value = prefs.getBoolean("AmoledTheme", false)
         hideTopBarState.value = prefs.getBoolean("HideTopBar", false)
         landscapeModeState.value = prefs.getBoolean("LandscapeMode", false)
         keepScreenOnState.value = prefs.getBoolean("KeepScreenOn", false)
-        themePresetState.value = prefs.getString("ThemePreset", ThemePresets.DEFAULT_ID) ?: ThemePresets.DEFAULT_ID
-        themeSecondaryState.value = ThemeHarmony.parseHex(prefs.getString("ThemeSecondary", null))
         blockServiceWorkerState.value = prefs.getBoolean("BlockServiceWorker", true)
         applyOrientation()
         applyKeepScreenOn()
@@ -247,13 +239,10 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
 
         setContent {
             val serviceEnabled = serviceEnabledState.value
-            val materialYou = materialYouState.value
             val amoled = amoledState.value
             val hideTopBar = hideTopBarState.value
             val landscapeMode = landscapeModeState.value
             val keepScreenOn = keepScreenOnState.value
-            val themePreset = themePresetState.value
-            val themeSecondary = themeSecondaryState.value
             val showDialog = showSleepTimerDialog.value
             val showVolume = showVolumeDialog.value
             val showBatteryPrompt = showBatteryDialog.value
@@ -310,11 +299,6 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
                     visible = settingsDialogOpen,
                     onClose = { settingsDialogOpen = false },
                     prefs = prefs,
-                    materialYou = materialYou,
-                    onMaterialYouChange = { enabled ->
-                        materialYouState.value = enabled
-                        ThemeController.updateDynamicColor(enabled)
-                    },
                     amoledThemeState = amoled,
                     onAmoledThemeChange = { enabled ->
                         amoledState.value = enabled
@@ -336,16 +320,6 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
                         keepScreenOnState.value = enabled
                         prefs.edit().putBoolean("KeepScreenOn", enabled).apply()
                         applyKeepScreenOn()
-                    },
-                    themePreset = themePreset,
-                    onThemePresetChange = { id ->
-                        themePresetState.value = id
-                        ThemeController.updatePreset(id)
-                    },
-                    themeSecondary = themeSecondary,
-                    onThemeSecondaryChange = { color ->
-                        themeSecondaryState.value = color
-                        ThemeController.updateSecondary(color)
                     },
                     onSaveProfile = { name, cookies -> saveProfile(name, cookies) },
                     onLoadProfile = { cookies -> loadProfile(cookies) },
@@ -1283,13 +1257,10 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
 
         prefs = getSharedPreferences("spotilol_prefs", MODE_PRIVATE)
         serviceEnabledState.value = prefs.getBoolean("ServiceOn", true)
-        materialYouState.value = prefs.getBoolean("MaterialYou", false)
         amoledState.value = prefs.getBoolean("AmoledTheme", false)
         hideTopBarState.value = prefs.getBoolean("HideTopBar", false)
         landscapeModeState.value = prefs.getBoolean("LandscapeMode", false)
         keepScreenOnState.value = prefs.getBoolean("KeepScreenOn", false)
-        themePresetState.value = prefs.getString("ThemePreset", ThemePresets.DEFAULT_ID) ?: ThemePresets.DEFAULT_ID
-        themeSecondaryState.value = ThemeHarmony.parseHex(prefs.getString("ThemeSecondary", null))
         blockServiceWorkerState.value = prefs.getBoolean("BlockServiceWorker", true)
         applyOrientation()
         applyKeepScreenOn()
@@ -1327,7 +1298,6 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
 
             val js = buildString {
                 append(buildAmoledJs(amoledEnabled))
-                append(ThemeController.buildAccentJs(this@MainActivity))
                 append(buildCustomCssJs(customCss))
             }
             view.evaluateJavascript(js, null)

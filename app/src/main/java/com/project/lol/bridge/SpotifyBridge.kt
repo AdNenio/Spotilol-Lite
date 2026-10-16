@@ -51,11 +51,8 @@ class SpotifyBridge(activityRef: WeakReference<Activity>) {
     var onMediaPosition: ((Long) -> Unit)? = null
     var onTimerDialogRequest: (() -> Unit)? = null
     var onVolumeDialogRequest: (() -> Unit)? = null
-    var onEnterPipRequest: (() -> Unit)? = null
-    var onEnterPipVideoRequest: ((Int, Int) -> Unit)? = null
     var onEnterVideoFullscreen: (() -> Unit)? = null
     var onExitVideoFullscreen: (() -> Unit)? = null
-    var onEnterLyricsPipRequest: (() -> Unit)? = null
     var onPlayerExpanded: ((Boolean) -> Unit)? = null
     var onWideVideo: ((Boolean) -> Unit)? = null
     var onCtxMenuState: ((Boolean) -> Unit)? = null
@@ -236,24 +233,6 @@ class SpotifyBridge(activityRef: WeakReference<Activity>) {
     }
 
     @JavascriptInterface
-    fun enterPip() {
-        val activity = activityRef.get() ?: return
-        Logger.i(CALL, "enterPip")
-        activity.runOnUiThread {
-            onEnterPipRequest?.invoke()
-        }
-    }
-
-    @JavascriptInterface
-    fun enterPipVideo(w: Int, h: Int) {
-        val activity = activityRef.get() ?: return
-        Logger.i(CALL, "enterPipVideo ${w}x$h")
-        activity.runOnUiThread {
-            onEnterPipVideoRequest?.invoke(w, h)
-        }
-    }
-
-    @JavascriptInterface
     fun enterVideoFullscreen() {
         val activity = activityRef.get() ?: return
         Logger.i(CALL, "enterVideoFullscreen")
@@ -268,15 +247,6 @@ class SpotifyBridge(activityRef: WeakReference<Activity>) {
         Logger.i(CALL, "exitVideoFullscreen")
         activity.runOnUiThread {
             onExitVideoFullscreen?.invoke()
-        }
-    }
-
-    @JavascriptInterface
-    fun enterLyricsPip() {
-        val activity = activityRef.get() ?: return
-        Logger.i(CALL, "enterLyricsPip")
-        activity.runOnUiThread {
-            onEnterLyricsPipRequest?.invoke()
         }
     }
 

@@ -1,9 +1,6 @@
 package com.project.lol.ui
 
 import android.annotation.SuppressLint
-import android.app.PendingIntent
-import android.app.PictureInPictureParams
-import android.app.RemoteAction
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -11,16 +8,12 @@ import android.content.pm.ActivityInfo
 import android.content.pm.ApplicationInfo
 import android.content.res.Configuration
 import android.database.ContentObserver
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
-import android.util.Rational
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -29,7 +22,6 @@ import android.webkit.CookieManager
 import android.webkit.WebStorage
 import android.webkit.WebView
 import android.widget.FrameLayout
-import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -124,9 +116,6 @@ import compose.icons.tablericons.Menu2
 import compose.icons.tablericons.Settings
 import org.json.JSONObject
 import java.lang.ref.WeakReference
-import java.net.HttpURLConnection
-import java.net.URL
-import kotlin.math.min
 import android.media.AudioManager
 import androidx.compose.runtime.mutableFloatStateOf
 import com.project.lol.ui.components.VolumeDialog
@@ -147,18 +136,6 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
 
     private val webViewGeneration = mutableIntStateOf(0)
     private var serviceStarted = false
-    @Volatile private var pipCoverBitmap: Bitmap? = null
-    @Volatile private var pipPlaying = false
-    private var lastPipCoverUrl = ""
-    private var pipOverlay: FrameLayout? = null
-    private var pipCoverImg: ImageView? = null
-    private var pipUsed = false
-    private var pipVideoView: View? = null
-    private var pipVideoCallback: android.webkit.WebChromeClient.CustomViewCallback? = null
-    private var pipVideoAspect: Rational? = null
-    private var pipVideoRequested = false
-    private var pipLyricsRequested = false
-    private val pipVideoActive = mutableStateOf(false)
 
     private val serviceEnabledState = mutableStateOf(true)
     private val amoledState = mutableStateOf(false)
@@ -247,7 +224,6 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
             val showBatteryPrompt = showBatteryDialog.value
             val loadProgress = loadingProgress.intValue
             val blockServiceWorker = blockServiceWorkerState.value
-            val pipFilling = pipVideoActive.value
             val videoFullscreen = videoFullscreenState.value
             val wideVideoFullscreen = wideVideoState.value &&
                 LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -341,7 +317,7 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
                 ) {
                     Scaffold(
                         topBar = {
-                            if (!hideTopBar && !pipFilling && !videoFullscreen && !wideVideoFullscreen) {
+                            if (!hideTopBar && !videoFullscreen && !wideVideoFullscreen) {
                                 CenterAlignedTopAppBar(
                                 title = {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -449,24 +425,12 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
                                 applyOrientation()
                             }
 
-                            bridge.onEnterPipRequest = {
-                                enterPipMode()
-                            }
-
-                            bridge.onEnterPipVideoRequest = { w, h ->
-                                enterPipVideoMode(w, h)
-                            }
-
                             bridge.onEnterVideoFullscreen = {
                                 enterVideoFullscreenMode()
                             }
 
                             bridge.onExitVideoFullscreen = {
                                 exitVideoFullscreenMode()
-                            }
-
-                            bridge.onEnterLyricsPipRequest = {
-                                enterPipLyricsMode()
                             }
 
                             bridge.onMediaStatus = { json ->
@@ -519,7 +483,7 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
                                 animationSpec = tween(durationMillis = 600, delayMillis = 200),
                                 label = "progressAlpha"
                             )
-                            if (progressAlpha > 0.001f && !pipFilling) {
+                            if (progressAlpha > 0.001f) {
                                 LinearProgressIndicator(
                                     progress = { loadProgress / 100f },
                                     modifier = Modifier
@@ -610,7 +574,7 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
                             )
                         }
 
-                        if (hideTopBar && !pipFilling) {
+                        if (hideTopBar) {
                             QuickAccessOverlay(
                                 showMenu = showMiniMenu,
                                 onToggleMenu = { showMiniMenu = !showMiniMenu },
@@ -881,235 +845,10 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
         }
     }
 
-    private fun enterPipMode(video: Boolean = false) {
-        Logger.i(TAG, "entering pip mode (video=$video)")
-        pipVideoRequested = video
-        pipVideoActive.value = video
-        pipUsed = true
-        if (lastPipCoverUrl.isNotEmpty() && pipCoverBitmap == null) {
-            fetchPipCover(lastPipCoverUrl)
-        }
-        if (!video) showPipOverlay()
-        val ok = enterPictureInPictureMode(buildPipParams())
-        if (!ok) {
-            hidePipOverlay()
-            pipVideoActive.value = false
-            pipLyricsRequested = false
-            if (video) setPipFillVideo(false)
-            setPipFillLyrics(false)
-        }
-    }
-
-    private fun enterPipVideoMode(w: Int, h: Int) {
-        pipVideoAspect = if (w > 0 && h > 0) Rational(w, h) else Rational(9, 16)
-        pipVideoRequested = true
-        val wv = webView
-        if (wv == null) {
-            enterPipMode(video = true)
-            return
-        }
-        wv.post {
-            wv.evaluateJavascript(
-                "window.__splPipFillVideo&&window.__splPipFillVideo(true)"
-            ) { enterPipMode(video = true) }
-        }
-    }
-
-    private fun enterPipLyricsMode() {
-        pipLyricsRequested = true
-        pipVideoAspect = Rational(9, 16)
-        val wv = webView
-        if (wv == null) {
-            enterPipMode(video = true)
-            return
-        }
-        wv.post {
-            wv.evaluateJavascript(
-                "window.__splPipFillLyrics&&window.__splPipFillLyrics(true)"
-            ) { enterPipMode(video = true) }
-        }
-    }
-
-    private fun handleCustomViewShown(
-        view: View?,
-        callback: android.webkit.WebChromeClient.CustomViewCallback?
-    ) {
-        Logger.i(TAG, "fullscreen video view shown")
-        pipVideoView = view
-        pipVideoCallback = callback
-        showPipVideoOverlay()
-        if (isInPictureInPictureMode) updatePipParams()
-    }
-
-    private fun handleCustomViewHidden() {
-        Logger.i(TAG, "fullscreen video view hidden")
-        pipVideoView = null
-        pipVideoCallback = null
-        hidePipOverlay()
-        if (isInPictureInPictureMode && pipVideoRequested) {
-            setPipFillVideo(true)
-            updatePipParams()
-            return
-        }
-        pipVideoRequested = false
-        pipVideoActive.value = false
-        if (isInPictureInPictureMode) fallbackPipToCover()
-    }
-
-    private fun setPipFillVideo(on: Boolean) {
-        webView?.evaluateJavascript(
-            "window.__splPipFillVideo&&window.__splPipFillVideo($on)",
-            null
-        )
-    }
-
-    private fun setPipFillLyrics(on: Boolean) {
-        webView?.evaluateJavascript(
-            "window.__splPipFillLyrics&&window.__splPipFillLyrics($on)",
-            null
-        )
-    }
-
-    private fun fallbackPipToCover() {
-        if (!isInPictureInPictureMode) return
-        pipVideoAspect = Rational(1, 1)
-        if (pipCoverBitmap == null && lastPipCoverUrl.isNotEmpty()) {
-            fetchPipCover(lastPipCoverUrl)
-        }
-        showPipOverlay()
-        updatePipParams()
-    }
-
-    override fun onPictureInPictureModeChanged(
-        isInPictureInPictureMode: Boolean,
-        newConfig: Configuration
-    ) {
-        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
-        if (isInPictureInPictureMode) {
-            if (pipVideoView == null && !pipVideoRequested) showPipOverlay()
-            updatePipParams()
-        } else {
-            hidePipOverlay()
-            pipVideoView = null
-            pipVideoAspect = null
-            pipVideoRequested = false
-            pipLyricsRequested = false
-            pipVideoActive.value = false
-            setPipFillVideo(false)
-            setPipFillLyrics(false)
-            pipVideoCallback?.onCustomViewHidden()
-            pipVideoCallback = null
-        }
-    }
-
-    private fun buildPipParams(): PictureInPictureParams =
-        PictureInPictureParams.Builder()
-            .setAspectRatio(pipVideoAspect ?: Rational(1, 1))
-            .setActions(buildPipActions())
-            .build()
-
-    private fun buildPipActions(): List<RemoteAction> {
-        val prev = RemoteAction(
-            Icon.createWithResource(this, R.drawable.ic_skip_prev),
-            getString(R.string.main_pip_previous), getString(R.string.main_pip_previous),
-            pipActionIntent(MediaNotificationService.ACTION_PREV)
-        )
-        val playPause = RemoteAction(
-            Icon.createWithResource(
-                this,
-                if (pipPlaying) R.drawable.ic_pause else R.drawable.ic_play
-            ),
-            if (pipPlaying) getString(R.string.main_pip_pause) else getString(R.string.main_pip_play),
-            if (pipPlaying) getString(R.string.main_pip_pause) else getString(R.string.main_pip_play),
-            pipActionIntent(MediaNotificationService.ACTION_PLAY_PAUSE)
-        )
-        val next = RemoteAction(
-            Icon.createWithResource(this, R.drawable.ic_skip_next),
-            getString(R.string.main_pip_next), getString(R.string.main_pip_next),
-            pipActionIntent(MediaNotificationService.ACTION_NEXT)
-        )
-        return listOf(prev, playPause, next)
-    }
-
-    private fun pipActionIntent(action: String): PendingIntent {
-        val intent = Intent(action).setPackage(packageName)
-        return PendingIntent.getBroadcast(
-            this, action.hashCode(), intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-    }
-
-    private fun updatePipParams() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && isInPictureInPictureMode) {
-            setPictureInPictureParams(buildPipParams())
-        }
-    }
-
-    private fun showPipVideoOverlay() {
-        if (pipOverlay != null) return
-        val content = findViewById<ViewGroup>(android.R.id.content) ?: return
-        val overlay = FrameLayout(this).apply {
-            setBackgroundColor(0xFF000000.toInt())
-        }
-        pipVideoView?.let {
-            overlay.addView(
-                it,
-                FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
-                )
-            )
-        }
-        pipOverlay = overlay
-        content.addView(
-            overlay,
-            ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-        )
-    }
-
-    private fun showPipOverlay() {
-        if (pipOverlay != null) return
-        val content = findViewById<ViewGroup>(android.R.id.content) ?: return
-        val img = ImageView(this).apply {
-            scaleType = ImageView.ScaleType.CENTER_CROP
-            setImageBitmap(pipCoverBitmap)
-        }
-        val overlay = FrameLayout(this).apply {
-            setBackgroundColor(0xFF000000.toInt())
-            addView(
-                img,
-                FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
-                )
-            )
-        }
-        pipCoverImg = img
-        pipOverlay = overlay
-        content.addView(
-            overlay,
-            ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-        )
-    }
-
-    private fun hidePipOverlay() {
-        pipOverlay?.let {
-            (it.parent as? ViewGroup)?.removeView(it)
-        }
-        pipOverlay = null
-        pipCoverImg = null
-    }
 
     private fun handleMediaStatus(json: String) {
         try {
             val obj = JSONObject(json)
-            pipPlaying = obj.optBoolean("playing", false)
 
             SleepTimerManager.onTrackInfo(
                 obj.optString("track").ifBlank { null },
@@ -1118,58 +857,14 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
                 obj.optBoolean("playing", false)
             )
 
-            Logger.v(TAG, "media status: playing=$pipPlaying title=${obj.optString("title", "").take(48)}")
-            val coverUrl = obj.optString("cover", "")
-            if (coverUrl.isNotEmpty() && coverUrl != "null" && coverUrl != lastPipCoverUrl) {
-                lastPipCoverUrl = coverUrl
-                if (pipUsed || isInPictureInPictureMode) {
-                    fetchPipCover(coverUrl)
-                } else {
-                    pipCoverBitmap = null
-                }
-            }
-            runOnUiThread { updatePipParams() }
+            Logger.v(TAG, "media status: title=${obj.optString("title", "").take(48)}")
         } catch (e: Exception) {
             Logger.d(TAG, "media status not parseable (${json.length} chars): ${e.message}")
         }
     }
 
-    private fun fetchPipCover(url: String) {
-        Thread {
-            var conn: HttpURLConnection? = null
-            try {
-                conn = URL(url).openConnection() as HttpURLConnection
-                conn.connectTimeout = 5000
-                conn.readTimeout = 5000
-                conn.connect()
-                val raw = BitmapFactory.decodeStream(conn.inputStream)
-                if (raw != null) {
-                    val target = 1024
-                    val scale = min(target.toFloat() / raw.width, target.toFloat() / raw.height)
-                    val w = (raw.width * scale).toInt().coerceAtLeast(1)
-                    val h = (raw.height * scale).toInt().coerceAtLeast(1)
-                    val scaled = Bitmap.createScaledBitmap(raw, w, h, true)
-                    if (scaled != raw) raw.recycle()
-                    pipCoverBitmap = scaled
-                    runOnUiThread {
-                        pipCoverImg?.setImageBitmap(scaled)
-                        updatePipParams()
-                    }
-                }
-            } catch (_: Exception) {
-            } finally {
-                try { conn?.disconnect() } catch (_: Exception) {}
-            }
-        }.start()
-    }
-
     private fun destroyWebView() {
         Logger.i(TAG, "releasing webview")
-        pipVideoView = null
-        pipVideoCallback = null
-        pipVideoActive.value = false
-        pipLyricsRequested = false
-        hidePipOverlay()
         WebViewHost.release()
         webViewGeneration.intValue++
     }
@@ -1204,11 +899,7 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        Logger.d(TAG, "config changed: orientation=${newConfig.orientation} pip=$isInPictureInPictureMode")
-        if (isInPictureInPictureMode && pipVideoRequested) {
-            if (pipLyricsRequested) setPipFillLyrics(true) else setPipFillVideo(true)
-            updatePipParams()
-        }
+        Logger.d(TAG, "config changed: orientation=${newConfig.orientation}")
     }
 
     private fun applyKeepScreenOn() {
@@ -1379,11 +1070,6 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
 
     override fun onDestroy() {
         Logger.i(TAG, "activity destroyed, detaching from the webview")
-        pipVideoView = null
-        pipVideoCallback = null
-        pipVideoActive.value = false
-        pipLyricsRequested = false
-        hidePipOverlay()
         WebViewHost.detach(this)
         WebViewHost.bridge?.rebind(WeakReference(null))
         if (MediaNotificationService.instance == null) WebViewHost.release()
@@ -1397,11 +1083,12 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
     }
 
     override fun onShowCustomView(view: View?, callback: android.webkit.WebChromeClient.CustomViewCallback?) {
-        handleCustomViewShown(view, callback)
+        Logger.i(TAG, "fullscreen video request ignored")
+        runCatching { callback?.onCustomViewHidden() }
     }
 
     override fun onHideCustomView() {
-        handleCustomViewHidden()
+        // no-op
     }
 
     override fun onWebViewError(code: Int, description: String) {
@@ -1416,6 +1103,7 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
     }
 
     override fun onPlayerReady(view: WebView) {
+        // no-op
     }
 
     override fun attachBaseContext(newBase: Context) {

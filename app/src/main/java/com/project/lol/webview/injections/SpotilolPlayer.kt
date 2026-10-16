@@ -89,7 +89,6 @@ object SpotilolPlayer {
                     +'<div class="spl-actions-left">'
                     +'<button class="spl-btn spl-btn-sm spl-ep-only spl-speed" id="spl-speed" aria-label="Playback speed"><span id="spl-speed-l">1\u00d7</span></button>'
                     +'<button class="spl-btn spl-btn-sm" id="spl-timer" aria-label="Timer"><svg viewBox="0 0 20 20"><path fill="currentColor" d="M16.32 7.1A8 8 0 1 1 9 4.06V2h2v2.06c1.46.18 2.8.76 3.9 1.62l1.46-1.46l1.42 1.42l-1.46 1.45zM10 18a6 6 0 1 0 0-12a6 6 0 0 0 0 12zM7 0h6v2H7V0zm5.12 8.46l1.42 1.42L10 13.4L8.59 12l3.53-3.54z"/></svg></button>'
-                    +'<button class="spl-btn spl-btn-sm" id="spl-pip" aria-label="Picture in Picture"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M19 11h-8v6h8v-6zm4 8V4.98C23 3.88 22.1 3 21 3H3c-1.1 0-2 .88-2 1.98V19c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2zm-2 .02H3V4.97h18v14.05z"/></svg></button>'
                     +'<button class="spl-btn spl-btn-sm" id="spl-nptoggle" aria-label="Now Playing"><svg viewBox="0 0 16 17"><rect x="1" y="0.75" width="14" height="15.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M 6 5 L 6 5.9160156 L 9.6933594 8.5 L 6 11.080078 L 6 12 L 11 8.5 L 6 5 z" stroke="currentColor" stroke-width="1.2"/></svg></button>'
                     +'<button class="spl-btn spl-btn-sm" id="spl-queue" aria-label="Queue"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M15 15H1v-1.5h14zm0-4.5H1V9h14zm-14-7A2.5 2.5 0 0 1 3.5 1h9a2.5 2.5 0 0 1 0 5h-9A2.5 2.5 0 0 1 1 3.5m2.5-1a1 1 0 0 0 0 2h9a1 1 0 1 0 0-2z"/></svg></button>'
                     +'<button class="spl-btn spl-btn-sm" id="spl-connect" aria-label="Connect to a device"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M6 2.75C6 1.784 6.784 1 7.75 1h6.5c.966 0 1.75.784 1.75 1.75v10.5A1.75 1.75 0 0 1 14.25 15h-6.5A1.75 1.75 0 0 1 6 13.25zm1.75-.25a.25.25 0 0 0-.25.25v10.5c0 .138.112.25.25.25h6.5a.25.25 0 0 0 .25-.25V2.75a.25.25 0 0 0-.25-.25zm-6 0a.25.25 0 0 0-.25.25v6.5c0 .138.112.25.25.25H4V11H1.75A1.75 1.75 0 0 1 0 9.25v-6.5C0 1.784.784 1 1.75 1H4v1.5zM4 15H2v-1.5h2z"/><path fill="currentColor" d="M13 10a2 2 0 1 1-4 0 2 2 0 0 1 4 0m-1-5a1 1 0 1 1-2 0 1 1 0 0 1 2 0"/></svg></button>'
@@ -252,15 +251,6 @@ object SpotilolPlayer {
                 document.getElementById('spl-nptoggle').onclick=function(){splCollapseFull();clickNP()};
                 document.getElementById('spl-collapse').onclick=function(){splSetMini(true)};
                 document.getElementById('spl-timer').onclick=function(){AndBridge.openTimerDialog()};
-                document.getElementById('spl-pip').onclick=function(){
-                    var pv=document.querySelector('.VideoPlayer__container video');
-                    if(pv){
-                        var w=pv.videoWidth||0,h=pv.videoHeight||0;
-                        AndBridge.enterPipVideo(w,h);
-                    } else {
-                        AndBridge.enterPip();
-                    }
-                };
                 window.__splPipFillMark=function(n){
                     if(!n) return;
                     try{

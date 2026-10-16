@@ -6,8 +6,6 @@
 -keep class com.project.lol.service.MediaNotificationService { *; }
 -keep class com.project.lol.ui.SplashActivity { *; }
 -keep class com.project.lol.ui.MainActivity { *; }
--keep class org.bouncycastle.** { *; }
--dontwarn org.bouncycastle.**
 -dontwarn javax.annotation.concurrent.GuardedBy
 -keepclassmembers enum * { *; }
 -keepclassmembers class * implements java.io.Serializable { *; }

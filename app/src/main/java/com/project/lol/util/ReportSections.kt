@@ -176,7 +176,6 @@ object ReportSections {
         sb.appendLine("amoled: ${prefs.getBoolean("AmoledTheme", false)}")
         sb.appendLine("powerSave: ${prefs.getBoolean("PowerSave", false)}")
         sb.appendLine("blockServiceWorker: ${prefs.getBoolean("BlockServiceWorker", true)}")
-        sb.appendLine("lyricsStyle: ${prefs.getString("LyricsStyle", "default")}")
         sb.appendLine("logging: ${Logger.isEnabled()}")
         sb.appendLine()
     }

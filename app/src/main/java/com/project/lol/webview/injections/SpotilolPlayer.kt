@@ -91,7 +91,6 @@ object SpotilolPlayer {
                     +'<button class="spl-btn spl-btn-sm" id="spl-timer" aria-label="Timer"><svg viewBox="0 0 20 20"><path fill="currentColor" d="M16.32 7.1A8 8 0 1 1 9 4.06V2h2v2.06c1.46.18 2.8.76 3.9 1.62l1.46-1.46l1.42 1.42l-1.46 1.45zM10 18a6 6 0 1 0 0-12a6 6 0 0 0 0 12zM7 0h6v2H7V0zm5.12 8.46l1.42 1.42L10 13.4L8.59 12l3.53-3.54z"/></svg></button>'
                     +'<button class="spl-btn spl-btn-sm" id="spl-pip" aria-label="Picture in Picture"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M19 11h-8v6h8v-6zm4 8V4.98C23 3.88 22.1 3 21 3H3c-1.1 0-2 .88-2 1.98V19c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2zm-2 .02H3V4.97h18v14.05z"/></svg></button>'
                     +'<button class="spl-btn spl-btn-sm" id="spl-nptoggle" aria-label="Now Playing"><svg viewBox="0 0 16 17"><rect x="1" y="0.75" width="14" height="15.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M 6 5 L 6 5.9160156 L 9.6933594 8.5 L 6 11.080078 L 6 12 L 11 8.5 L 6 5 z" stroke="currentColor" stroke-width="1.2"/></svg></button>'
-                    +'<button class="spl-btn spl-btn-sm" id="spl-lyrics" aria-label="Lyrics"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M13.426 2.574a2.831 2.831 0 0 0-4.797 1.55l3.247 3.247a2.831 2.831 0 0 0 1.55-4.797M10.5 8.118l-2.619-2.62L4.74 9.075 2.065 12.12a1.287 1.287 0 0 0 1.816 1.816l3.06-2.688 3.56-3.129zM7.12 4.094a4.331 4.331 0 1 1 4.786 4.786l-3.974 3.493-3.06 2.689a2.787 2.787 0 0 1-3.933-3.933l2.676-3.045z"/></svg></button>'
                     +'<button class="spl-btn spl-btn-sm" id="spl-queue" aria-label="Queue"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M15 15H1v-1.5h14zm0-4.5H1V9h14zm-14-7A2.5 2.5 0 0 1 3.5 1h9a2.5 2.5 0 0 1 0 5h-9A2.5 2.5 0 0 1 1 3.5m2.5-1a1 1 0 0 0 0 2h9a1 1 0 1 0 0-2z"/></svg></button>'
                     +'<button class="spl-btn spl-btn-sm" id="spl-connect" aria-label="Connect to a device"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M6 2.75C6 1.784 6.784 1 7.75 1h6.5c.966 0 1.75.784 1.75 1.75v10.5A1.75 1.75 0 0 1 14.25 15h-6.5A1.75 1.75 0 0 1 6 13.25zm1.75-.25a.25.25 0 0 0-.25.25v10.5c0 .138.112.25.25.25h6.5a.25.25 0 0 0 .25-.25V2.75a.25.25 0 0 0-.25-.25zm-6 0a.25.25 0 0 0-.25.25v6.5c0 .138.112.25.25.25H4V11H1.75A1.75 1.75 0 0 1 0 9.25v-6.5C0 1.784.784 1 1.75 1H4v1.5zM4 15H2v-1.5h2z"/><path fill="currentColor" d="M13 10a2 2 0 1 1-4 0 2 2 0 0 1 4 0m-1-5a1 1 0 1 1-2 0 1 1 0 0 1 2 0"/></svg></button>'
                     +'<button class="spl-btn spl-btn-sm spl-vol-btn" id="spl-vol-btn" aria-label="Volume"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M9.741.85a.75.75 0 0 1 .375.65v13a.75.75 0 0 1-1.125.65l-6.925-4a3.64 3.64 0 0 1-1.33-4.967 3.64 3.64 0 0 1 1.33-1.332l6.925-4a.75.75 0 0 1 .75 0zm-6.924 5.3a2.14 2.14 0 0 0 0 3.7l5.8 3.35V2.8zm8.683 4.29V5.56a2.75 2.75 0 0 1 0 4.88"/><path fill="currentColor" d="M11.5 13.614a5.752 5.752 0 0 0 0-11.228v1.55a4.252 4.252 0 0 1 0 8.127z"/></svg></button>'
@@ -231,7 +230,7 @@ object SpotilolPlayer {
                         '#spotilolPlayerControls.spl-full.spl-video-on .spl-transport{grid-area:ctl;justify-self:center;z-index:1}',
                         '#spotilolPlayerControls.spl-full.spl-video-on .spl-row2{grid-area:ctl;align-self:center;margin:0!important}',
                         '#spotilolPlayerControls.spl-full.spl-video-on .spl-actions-left{display:flex!important;width:100%;justify-content:flex-start}',
-                        '#spotilolPlayerControls.spl-full.spl-video-on #spl-nptoggle,#spotilolPlayerControls.spl-full.spl-video-on #spl-lyrics{display:none!important}',
+                        '#spotilolPlayerControls.spl-full.spl-video-on #spl-nptoggle{display:none!important}',
                         '#spotilolPlayerControls.spl-full.spl-video-on #spl-queue{margin-left:auto}',
                         '}'
                     ].join('');
@@ -246,7 +245,6 @@ object SpotilolPlayer {
                 document.getElementById('spl-play-mini').onclick=function(){var st=window.splIsPlaying();actPlayPause(st===null?null:!st)};
                 document.getElementById('spl-shuffle').onclick=function(){var sb=splFindShuffle();if(sb&&sb.getAttribute('aria-disabled')!=='true')sb.click()};
                 document.getElementById('spl-repeat').onclick=function(){actRepeat()};
-                document.getElementById('spl-lyrics').onclick=function(){if(this.classList.contains('spl-disabled'))return;splCollapseFull();if(typeof closeNowPlay==='function') closeNowPlay();var lb=document.querySelector('button[data-testid=lyrics-button]');if(lb&&!lb.disabled)lb.click()};
                 document.getElementById('spl-queue').onclick=function(){splCollapseFull();var qb=document.querySelector('button[data-testid=control-button-queue]');if(qb)qb.click()};
                 document.getElementById('spl-vol-btn').onclick=function(){AndBridge.openVolumeDialog()};
                 document.getElementById('spl-connect').onclick=function(){var cb=document.querySelector('button[aria-describedby="connect-message-nudge"]');if(cb)cb.click()};
@@ -606,7 +604,6 @@ object SpotilolPlayer {
                         var rp=document.getElementById('spl-repeat');
                         var vl=document.getElementById('spl-vol-btn');
                         var lk=document.getElementById('spl-liked');
-                        var ly=document.getElementById('spl-lyrics');
                         var tm=document.getElementById('spl-timer');
                         var cn=document.getElementById('spl-connect');
                         var av=document.getElementById('spl-avtoggle');
@@ -699,13 +696,6 @@ object SpotilolPlayer {
                             } else if(!muted&&hasX){
                                 vl.innerHTML='<svg viewBox="0 0 16 16"><path fill="currentColor" d="M9.741.85a.75.75 0 0 1 .375.65v13a.75.75 0 0 1-1.125.65l-6.925-4a3.64 3.64 0 0 1-1.33-4.967 3.64 3.64 0 0 1 1.33-1.332l6.925-4a.75.75 0 0 1 .75 0zm-6.924 5.3a2.14 2.14 0 0 0 0 3.7l5.8 3.35V2.8zm8.683 4.29V5.56a2.75 2.75 0 0 1 0 4.88"/><path fill="currentColor" d="M11.5 13.614a5.752 5.752 0 0 0 0-11.228v1.55a4.252 4.252 0 0 1 0 8.127z"/></svg>';
                             }
-                        }
-                        var lb=window.splQ('button[data-testid=lyrics-button]');
-                        if(lb){
-                            ly.style.display='';
-                            ly.classList.toggle('spl-disabled',lb.disabled||lb.getAttribute('aria-disabled')==='true');
-                        } else {
-                            ly.style.display='none';
                         }
                         if(tm) tm.classList.toggle('spl-active',typeof sleepTimerActive!=='undefined'&&sleepTimerActive&&sleepTimerActive.value);
                         if(cn){

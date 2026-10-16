@@ -40,7 +40,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -55,7 +54,6 @@ import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.SecondaryScrollableTabRow
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -65,12 +63,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TooltipAnchorPosition
 import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
-import androidx.compose.material3.rememberSliderState
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -93,7 +89,6 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
@@ -107,9 +102,6 @@ import com.project.lol.profile.ProfileManager
 import com.project.lol.service.MediaNotificationService
 import com.project.lol.ui.SplashActivity
 import com.project.lol.ui.components.ChangelogDialog
-import com.project.lol.ui.lyrics.CustomLyricsPresets
-import com.project.lol.ui.lyrics.LyricsPreset
-import com.project.lol.ui.lyrics.LyricsPresetShare
 import com.project.lol.ui.theme.SpotifyTheme
 import com.project.lol.util.AppLocale
 import com.project.lol.util.BatterySaver
@@ -121,8 +113,6 @@ import com.project.lol.util.LogFilter
 import com.project.lol.util.LogLevel
 import com.project.lol.util.Logger
 import com.project.lol.util.Logger.isAutoScroll
-import com.project.lol.webview.helpers.LyricsStyle
-import com.project.lol.webview.helpers.LyricsTheme
 import compose.icons.TablerIcons
 import compose.icons.tablericons.ArrowDown
 import compose.icons.tablericons.ArrowsMinimize
@@ -133,7 +123,6 @@ import compose.icons.tablericons.BrandDiscord
 import compose.icons.tablericons.BrightnessUp
 import compose.icons.tablericons.Brush
 import compose.icons.tablericons.Bug
-import compose.icons.tablericons.Check
 import compose.icons.tablericons.ChevronRight
 import compose.icons.tablericons.Click
 import compose.icons.tablericons.CloudOff
@@ -145,7 +134,6 @@ import compose.icons.tablericons.Devices
 import compose.icons.tablericons.Download
 import compose.icons.tablericons.EyeOff
 import compose.icons.tablericons.FileDownload
-import compose.icons.tablericons.FileUpload
 import compose.icons.tablericons.Flask
 import compose.icons.tablericons.InfoCircle
 import compose.icons.tablericons.Language
@@ -156,8 +144,6 @@ import compose.icons.tablericons.Movie
 import compose.icons.tablericons.Music
 import compose.icons.tablericons.Palette
 import compose.icons.tablericons.PlayerPlay
-import compose.icons.tablericons.Playlist
-import compose.icons.tablericons.Plus
 import compose.icons.tablericons.Power
 import compose.icons.tablericons.Rocket
 import compose.icons.tablericons.RotateClockwise2
@@ -231,12 +217,6 @@ fun SettingsContent(
     var webVideos by remember { mutableStateOf(prefs.getBoolean("WebVideos", true)) }
     var playlistSortEnabled by remember { mutableStateOf(prefs.getBoolean("PlaylistSortEnabled", true)) }
     var showScrollbar by remember { mutableStateOf(prefs.getBoolean("ShowScrollbar", true)) }
-    var lyricsStyle by remember { mutableStateOf(prefs.getString("LyricsStyle", LyricsTheme.DEFAULT_STYLE) ?: LyricsTheme.DEFAULT_STYLE) }
-    var lyricsPresetId by remember { mutableStateOf(prefs.getString("LyricsPresetId", LyricsTheme.DEFAULT_STYLE) ?: LyricsTheme.DEFAULT_STYLE) }
-    var lyricsScale by remember { mutableFloatStateOf(prefs.getFloat("LyricsScale", 1f)) }
-    var lyricsSpacing by remember { mutableFloatStateOf(prefs.getFloat("LyricsSpacing", 1f)) }
-    var lyricsAlign by remember { mutableStateOf(prefs.getString("LyricsAlign", LyricsTheme.ALIGN_START) ?: LyricsTheme.ALIGN_START) }
-    var lyricsAnimate by remember { mutableStateOf(prefs.getBoolean("LyricsAnimate", true)) }
     var fastStartup by remember { mutableStateOf(prefs.getBoolean("FastStartup", false)) }
 
     val context = LocalContext.current
@@ -261,7 +241,7 @@ fun SettingsContent(
     var showDevlogDialog by remember { mutableStateOf(false) }
     var debugUnlocked by remember { mutableStateOf(prefs.getBoolean("DebugUnlocked", false)) }
     var debugTapCount by remember { mutableStateOf(0) }
-    var showLyricsStyleDialog by remember { mutableStateOf(false) }
+
     fun applyLanguageRestart() {
         runCatching { context.stopService(Intent(context, MediaNotificationService::class.java)) }
         val intent = Intent(context, SplashActivity::class.java).apply {
@@ -545,26 +525,6 @@ fun SettingsContent(
                             playlistSortEnabled = it
                             prefs.edit().putBoolean("PlaylistSortEnabled", it).apply()
                         }
-                    )
-
-                    HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-
-                    val lyricsStyleLabel = stringResource(
-                        LyricsTheme.STYLE_OPTIONS.firstOrNull { it.first == lyricsStyle }?.second
-                            ?: R.string.settings_lyrics_style_fullscreen
-                    )
-                    val lyricsAlignLabel = stringResource(
-                        when (lyricsAlign) {
-                            LyricsTheme.ALIGN_CENTER -> R.string.settings_lyrics_align_center
-                            LyricsTheme.ALIGN_END -> R.string.settings_lyrics_align_end
-                            else -> R.string.settings_lyrics_align_start
-                        }
-                    )
-                    SettingTile(
-                        title = stringResource(R.string.settings_lyrics_style),
-                        subtitle = "$lyricsStyleLabel · $lyricsAlignLabel · ${"%.2f".format(lyricsScale)}×",
-                        icon = TablerIcons.Playlist,
-                        onClick = { showLyricsStyleDialog = true }
                     )
 
                     HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
@@ -1006,74 +966,6 @@ fun SettingsContent(
         )
     }
 
-    if (showLyricsStyleDialog) {
-        LyricsStyleDialog(
-            selectedId = lyricsPresetId,
-            preset = lyricsStyle,
-            scale = lyricsScale,
-            spacing = lyricsSpacing,
-            align = lyricsAlign,
-            animate = lyricsAnimate,
-            onSelectBuiltIn = { value ->
-                lyricsStyle = value
-                lyricsPresetId = value
-                prefs.edit()
-                    .putString("LyricsStyle", value)
-                    .putString("LyricsPresetId", value)
-                    .apply()
-            },
-            onSelectCustom = { custom ->
-                val style = custom.style
-                lyricsStyle = style.preset
-                lyricsScale = style.scale
-                lyricsSpacing = style.spacing
-                lyricsAlign = style.align
-                lyricsAnimate = style.animate
-                lyricsPresetId = custom.id
-                prefs.edit()
-                    .putString("LyricsStyle", style.preset)
-                    .putFloat("LyricsScale", style.scale)
-                    .putFloat("LyricsSpacing", style.spacing)
-                    .putString("LyricsAlign", style.align)
-                    .putBoolean("LyricsAnimate", style.animate)
-                    .putString("LyricsPresetId", custom.id)
-                    .apply()
-            },
-            onDeleteCustom = { id ->
-                CustomLyricsPresets.remove(id)
-                if (lyricsPresetId == id) {
-                    lyricsPresetId = lyricsStyle
-                    prefs.edit().putString("LyricsPresetId", lyricsStyle).apply()
-                }
-            },
-            onSaveCurrent = { name ->
-                val saved = CustomLyricsPresets.add(
-                    name,
-                    LyricsStyle(lyricsStyle, lyricsScale, lyricsSpacing, lyricsAlign, lyricsAnimate)
-                )
-                lyricsPresetId = saved.id
-                prefs.edit().putString("LyricsPresetId", saved.id).apply()
-            },
-            onScaleChange = { value ->
-                lyricsScale = value
-                prefs.edit().putFloat("LyricsScale", value).apply()
-            },
-            onSpacingChange = { value ->
-                lyricsSpacing = value
-                prefs.edit().putFloat("LyricsSpacing", value).apply()
-            },
-            onAlignChange = { value ->
-                lyricsAlign = value
-                prefs.edit().putString("LyricsAlign", value).apply()
-            },
-            onAnimateChange = { value ->
-                lyricsAnimate = value
-                prefs.edit().putBoolean("LyricsAnimate", value).apply()
-            },
-            onDismiss = { showLyricsStyleDialog = false }
-        )
-    }
-
     // dead code: gui mode selector dialog. wide window and none were never implemented,
     // the webview is always injected with the mobile css and js hack.
     // if (showGuiModeDialog) {
@@ -1465,586 +1357,6 @@ fun ProfileRow(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-fun LyricsStyleDialog(
-    selectedId: String,
-    preset: String,
-    scale: Float,
-    spacing: Float,
-    align: String,
-    animate: Boolean,
-    onSelectBuiltIn: (String) -> Unit,
-    onSelectCustom: (LyricsPreset) -> Unit,
-    onDeleteCustom: (String) -> Unit,
-    onSaveCurrent: (String) -> Unit,
-    onScaleChange: (Float) -> Unit,
-    onSpacingChange: (Float) -> Unit,
-    onAlignChange: (String) -> Unit,
-    onAnimateChange: (Boolean) -> Unit,
-    onDismiss: () -> Unit
-) {
-    val wide = LocalConfiguration.current.screenWidthDp >= LYRICS_WIDE_BREAKPOINT
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val customs = CustomLyricsPresets.list
-    var showSaveDialog by remember { mutableStateOf(false) }
-    var saveName by remember { mutableStateOf("") }
-
-    val exportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument(LyricsPresetShare.MIME_TYPE)
-    ) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        val payload = LyricsPresetShare.encode(customs.toList())
-        scope.launch {
-            val done = runCatching {
-                withContext(Dispatchers.IO) { LyricsPresetShare.write(context, uri, payload) }
-            }.isSuccess
-            Toast.makeText(
-                context,
-                if (done) R.string.settings_lyrics_export_done else R.string.settings_lyrics_export_failed,
-                Toast.LENGTH_SHORT
-            ).show()
-        }
-    }
-
-    val importLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        scope.launch {
-            val result = runCatching {
-                val payload = withContext(Dispatchers.IO) { LyricsPresetShare.read(context, uri) }
-                LyricsPresetShare.decode(payload)
-            }
-            result.onSuccess { presets ->
-                val added = CustomLyricsPresets.addAll(presets)
-                added.lastOrNull()?.let(onSelectCustom)
-                Toast.makeText(context, R.string.settings_lyrics_import_done, Toast.LENGTH_SHORT).show()
-            }.onFailure {
-                Toast.makeText(context, R.string.settings_lyrics_import_failed, Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    val exportAction = {
-        if (customs.isEmpty()) {
-            Toast.makeText(context, R.string.settings_lyrics_export_empty, Toast.LENGTH_SHORT).show()
-        } else {
-            exportLauncher.launch(LyricsPresetShare.fileName())
-        }
-    }
-    val saveAction = {
-        saveName = ""
-        showSaveDialog = true
-    }
-
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth(if (wide) 0.92f else 0.95f)
-                .fillMaxHeight(if (wide) 0.92f else 0.9f),
-            shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            tonalElevation = 6.dp
-        ) {
-            Column(modifier = Modifier.fillMaxSize().padding(18.dp)) {
-                LyricsDialogHeader(onDismiss)
-                Spacer(Modifier.height(14.dp))
-                if (wide) {
-                    Row(
-                        modifier = Modifier.fillMaxSize(),
-                        horizontalArrangement = Arrangement.spacedBy(18.dp)
-                    ) {
-                        LyricsPresetList(
-                            selectedId = selectedId,
-                            customs = customs,
-                            onSelectBuiltIn = onSelectBuiltIn,
-                            onSelectCustom = onSelectCustom,
-                            onDeleteCustom = onDeleteCustom,
-                            onSaveCurrent = saveAction,
-                            onExport = exportAction,
-                            onImport = { importLauncher.launch(arrayOf(LyricsPresetShare.MIME_TYPE, "*/*")) },
-                            modifier = Modifier
-                                .weight(0.40f)
-                                .fillMaxHeight()
-                                .verticalScroll(rememberScrollState())
-                        )
-                        Box(
-                            modifier = Modifier
-                                .width(1.dp)
-                                .fillMaxHeight()
-                                .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
-                        )
-                        LyricsTuning(
-                            preset = preset,
-                            scale = scale,
-                            spacing = spacing,
-                            align = align,
-                            animate = animate,
-                            onScaleChange = onScaleChange,
-                            onSpacingChange = onSpacingChange,
-                            onAlignChange = onAlignChange,
-                            onAnimateChange = onAnimateChange,
-                            modifier = Modifier
-                                .weight(0.60f)
-                                .fillMaxHeight()
-                                .verticalScroll(rememberScrollState())
-                        )
-                    }
-                } else {
-                    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                        LyricsPresetList(
-                            selectedId = selectedId,
-                            customs = customs,
-                            onSelectBuiltIn = onSelectBuiltIn,
-                            onSelectCustom = onSelectCustom,
-                            onDeleteCustom = onDeleteCustom,
-                            onSaveCurrent = saveAction,
-                            onExport = exportAction,
-                            onImport = { importLauncher.launch(arrayOf(LyricsPresetShare.MIME_TYPE, "*/*")) },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Spacer(Modifier.height(16.dp))
-                        LyricsTuning(
-                            preset = preset,
-                            scale = scale,
-                            spacing = spacing,
-                            align = align,
-                            animate = animate,
-                            onScaleChange = onScaleChange,
-                            onSpacingChange = onSpacingChange,
-                            onAlignChange = onAlignChange,
-                            onAnimateChange = onAnimateChange,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    if (showSaveDialog) {
-        AlertDialog(
-            onDismissRequest = { showSaveDialog = false },
-            shape = RoundedCornerShape(24.dp),
-            title = {
-                Text(
-                    text = stringResource(R.string.settings_lyrics_save_preset),
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            text = {
-                OutlinedTextField(
-                    value = saveName,
-                    onValueChange = { saveName = it },
-                    singleLine = true,
-                    label = { Text(stringResource(R.string.settings_lyrics_preset_name)) },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onSaveCurrent(saveName)
-                        showSaveDialog = false
-                        Toast.makeText(context, R.string.settings_lyrics_preset_saved, Toast.LENGTH_SHORT).show()
-                    },
-                    enabled = saveName.isNotBlank()
-                ) {
-                    Text(stringResource(R.string.settings_save), fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showSaveDialog = false }) {
-                    Text(
-                        stringResource(R.string.settings_cancel),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        )
-    }
-}
-
-@Composable
-private fun LyricsDialogHeader(onDismiss: () -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-            imageVector = TablerIcons.Playlist,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(22.dp)
-        )
-        Spacer(Modifier.width(10.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = stringResource(R.string.settings_lyrics_style),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = stringResource(R.string.settings_lyrics_editor_subtitle),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        IconButton(onClick = onDismiss) {
-            Icon(
-                imageVector = TablerIcons.X,
-                contentDescription = stringResource(R.string.settings_close),
-                modifier = Modifier.size(20.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun LyricsPresetList(
-    selectedId: String,
-    customs: List<LyricsPreset>,
-    onSelectBuiltIn: (String) -> Unit,
-    onSelectCustom: (LyricsPreset) -> Unit,
-    onDeleteCustom: (String) -> Unit,
-    onSaveCurrent: () -> Unit,
-    onExport: () -> Unit,
-    onImport: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(
-            text = stringResource(R.string.settings_lyrics_presets),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        LyricsTheme.STYLE_OPTIONS.forEach { (value, labelRes) ->
-            LyricsPresetRow(
-                label = stringResource(labelRes),
-                selected = value == selectedId,
-                onClick = { onSelectBuiltIn(value) }
-            )
-        }
-
-        if (customs.isNotEmpty()) {
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = stringResource(R.string.settings_lyrics_custom_presets),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            customs.forEach { custom ->
-                LyricsPresetRow(
-                    label = custom.name,
-                    selected = custom.id == selectedId,
-                    onClick = { onSelectCustom(custom) },
-                    onDelete = { onDeleteCustom(custom.id) }
-                )
-            }
-        }
-
-        Spacer(Modifier.height(10.dp))
-        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = stringResource(R.string.settings_lyrics_actions),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Button(
-            onClick = onSaveCurrent,
-            modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
-        ) {
-            Icon(TablerIcons.Plus, contentDescription = null, modifier = Modifier.size(16.dp))
-            Spacer(Modifier.width(6.dp))
-            Text(
-                text = stringResource(R.string.settings_lyrics_save_preset),
-                style = MaterialTheme.typography.labelLarge,
-                maxLines = 1
-            )
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            OutlinedButton(
-                onClick = onExport,
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                    contentColor = MaterialTheme.colorScheme.onSurface
-                ),
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
-            ) {
-                Icon(TablerIcons.FileUpload, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text = stringResource(R.string.settings_lyrics_export),
-                    style = MaterialTheme.typography.labelMedium,
-                    maxLines = 1
-                )
-            }
-            OutlinedButton(
-                onClick = onImport,
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                    contentColor = MaterialTheme.colorScheme.onSurface
-                ),
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
-            ) {
-                Icon(TablerIcons.FileDownload, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text = stringResource(R.string.settings_lyrics_import),
-                    style = MaterialTheme.typography.labelMedium,
-                    maxLines = 1
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun LyricsPresetRow(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    onDelete: (() -> Unit)? = null
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(
-                if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.22f)
-                else Color.Transparent
-            )
-            .clickable(onClick = onClick)
-            .padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f).padding(vertical = 6.dp)
-        )
-        if (selected) {
-            Icon(
-                imageVector = TablerIcons.Check,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp)
-            )
-        }
-        if (onDelete != null) {
-            IconButton(onClick = onDelete, modifier = Modifier.size(30.dp)) {
-                Icon(
-                    imageVector = TablerIcons.Trash,
-                    contentDescription = stringResource(R.string.settings_delete),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(15.dp)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun LyricsTuning(
-    preset: String,
-    scale: Float,
-    spacing: Float,
-    align: String,
-    animate: Boolean,
-    onScaleChange: (Float) -> Unit,
-    onSpacingChange: (Float) -> Unit,
-    onAlignChange: (String) -> Unit,
-    onAnimateChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val scaleState = rememberSliderState(value = scale, trackRange = LyricsTheme.SCALE_MIN..LyricsTheme.SCALE_MAX)
-    val spacingState = rememberSliderState(value = spacing, trackRange = LyricsTheme.SPACING_MIN..LyricsTheme.SPACING_MAX)
-    val preview = LyricsTheme.previewStyle(
-        LyricsStyle(preset, scaleState.value, spacingState.value, align, animate)
-    )
-
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(
-            text = stringResource(R.string.settings_lyrics_preview),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        LyricsPreviewCard(preview = preview, align = align)
-
-        Column {
-            LyricsTuningLabel(stringResource(R.string.settings_lyrics_size), "${"%.2f".format(scaleState.value)}×")
-            Slider(
-                state = scaleState,
-                onValueChange = { scaleState.value = it },
-                onValueChangeFinished = { onScaleChange(scaleState.value) },
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-
-        Column {
-            LyricsTuningLabel(stringResource(R.string.settings_lyrics_spacing), "${"%.2f".format(spacingState.value)}×")
-            Slider(
-                state = spacingState,
-                onValueChange = { spacingState.value = it },
-                onValueChangeFinished = { onSpacingChange(spacingState.value) },
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-
-        Column {
-            LyricsTuningLabel(stringResource(R.string.settings_lyrics_alignment), null)
-            Spacer(Modifier.height(4.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                LyricsTheme.ALIGN_OPTIONS.forEach { option ->
-                    val labelRes = when (option) {
-                        LyricsTheme.ALIGN_CENTER -> R.string.settings_lyrics_align_center
-                        LyricsTheme.ALIGN_END -> R.string.settings_lyrics_align_end
-                        else -> R.string.settings_lyrics_align_start
-                    }
-                    FilterChip(
-                        selected = option == align,
-                        onClick = { onAlignChange(option) },
-                        label = {
-                            Text(
-                                text = stringResource(labelRes),
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                        }
-                    )
-                }
-            }
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .clickable { onAnimateChange(!animate) }
-                .padding(horizontal = 4.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(R.string.settings_lyrics_animation),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = stringResource(R.string.settings_lyrics_animation_hint),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Switch(
-                checked = animate,
-                onCheckedChange = onAnimateChange,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                    checkedTrackColor = MaterialTheme.colorScheme.primary
-                )
-            )
-        }
-    }
-}
-
-@Composable
-private fun LyricsTuningLabel(title: String, value: String?) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.weight(1f)
-        )
-        if (value != null) {
-            Text(
-                text = value,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
-    }
-}
-
-@Composable
-private fun LyricsPreviewCard(preview: LyricsTheme.PreviewStyle, align: String) {
-    val textAlign = when (align) {
-        LyricsTheme.ALIGN_CENTER -> TextAlign.Center
-        LyricsTheme.ALIGN_END -> TextAlign.End
-        else -> TextAlign.Start
-    }
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f)
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            LyricsPreviewLine(
-                text = stringResource(R.string.settings_lyrics_preview_passed),
-                sizeSp = preview.baseSp,
-                lineHeightMul = preview.lineHeight,
-                weight = preview.weight,
-                opacity = preview.passedOpacity,
-                textAlign = textAlign,
-                sizeScale = 1f
-            )
-            LyricsPreviewLine(
-                text = stringResource(R.string.settings_lyrics_preview_active),
-                sizeSp = preview.baseSp,
-                lineHeightMul = preview.lineHeight,
-                weight = preview.activeWeight,
-                opacity = 1f,
-                textAlign = textAlign,
-                sizeScale = preview.activeScale
-            )
-            LyricsPreviewLine(
-                text = stringResource(R.string.settings_lyrics_preview_upcoming),
-                sizeSp = preview.baseSp,
-                lineHeightMul = preview.lineHeight,
-                weight = preview.weight,
-                opacity = preview.upcomingOpacity,
-                textAlign = textAlign,
-                sizeScale = 1f
-            )
-        }
-    }
-}
-
-@Composable
-private fun LyricsPreviewLine(
-    text: String,
-    sizeSp: Float,
-    lineHeightMul: Float,
-    weight: Int,
-    opacity: Float,
-    textAlign: TextAlign,
-    sizeScale: Float
-) {
-    val size = sizeSp * sizeScale
-    Text(
-        text = text,
-        fontSize = size.sp,
-        lineHeight = (size * lineHeightMul).sp,
-        fontWeight = FontWeight(weight),
-        textAlign = textAlign,
-        color = MaterialTheme.colorScheme.onSurface.copy(alpha = opacity),
-        modifier = Modifier.fillMaxWidth()
-    )
-}
 
 @Composable
 fun SingleChoiceDialog(

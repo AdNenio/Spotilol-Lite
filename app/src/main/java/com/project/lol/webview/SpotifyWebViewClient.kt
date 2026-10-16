@@ -425,7 +425,6 @@ class SpotifyWebViewClient(
         val hideEmptyPlayer = prefs.getBoolean("HideEmptyPlayer", false)
         val playlistSortEnabled = prefs.getBoolean("PlaylistSortEnabled", true)
         val showScrollbar = prefs.getBoolean("ShowScrollbar", true)
-        val lyricsStyle = LyricsStyle.from(prefs)
         val webCanvas = prefs.getBoolean("WebCanvas", true)
         val webVideos = prefs.getBoolean("WebVideos", true)
         val hideTopBar = prefs.getBoolean("HideTopBar", false)
@@ -434,8 +433,7 @@ class SpotifyWebViewClient(
             TAG,
             "inject: engine=$playerMode autoPlay=$autoPlayMode closeNp=$closeNowPlay amoled=$amoledEnabled " +
                 "logging=$debugOverlay takeControl=$takeControl sort=$playlistSortEnabled " +
-                "scrollbar=$showScrollbar css=${customCss.length}chars " +
-                "lyrics=${lyricsStyle.preset}/${lyricsStyle.align}/${lyricsStyle.scale}x${lyricsStyle.spacing}"
+                "scrollbar=$showScrollbar css=${customCss.length}chars"
         )
 
         val js = buildString {
@@ -480,8 +478,6 @@ class SpotifyWebViewClient(
             append(NpHeaderFix.CONTENT)
             append(ErrorDialogRestyle.CONTENT)
             append(ToastFix.CONTENT)
-            append(LyricsSyncFix.CONTENT)
-            append(LyricsEngine.CONTENT)
             append(QueueAutoClose.CONTENT)
             append(LibraryAutoClose.CONTENT)
             append(PlaylistSort.CONTENT)
@@ -492,13 +488,11 @@ class SpotifyWebViewClient(
                 append("window.__splFullPlayer=${playerMode == "fullscreen"};\n")
                 append(SpotilolPlayer.CONTENT)
                 append(VideoFullscreen.CONTENT)
-                append(LyricsPip.CONTENT)
             }
         }
         val cleanJs = JsUtils.stripConsoleLogs(js) + "\n" +
                 buildAmoledJs(amoledEnabled) + "\n" +
-                buildCustomCssJs(customCss) + "\n" +
-                LyricsTheme.buildLyricsStyleJs(lyricsStyle)
+                buildCustomCssJs(customCss)
         if (playerMode == "original") {
             view.evaluateJavascript(cleanJs + "\n(function(){var s=document.createElement('style');s.id='spl-np-show';s.textContent='aside[data-testid=\"now-playing-bar\"]{display:flex!important}';document.head.appendChild(s);})();", null)
         } else {
@@ -550,8 +544,6 @@ class SpotifyWebViewClient(
                             buildCustomCssJs(prefs.getString("CustomCss", "") ?: "")
                     wv.evaluateJavascript(js, null)
                 }
-                in LyricsStyle.PREF_KEYS ->
-                    wv.evaluateJavascript(LyricsTheme.buildLyricsStyleJs(LyricsStyle.from(prefs)), null)
                 "TakeControl" -> {
                     val on = prefs.getBoolean("TakeControl", true)
                     wv.evaluateJavascript("window.__splTakeControl=$on;", null)

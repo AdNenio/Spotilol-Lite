@@ -118,7 +118,6 @@ import com.project.lol.util.UpdateChecker
 import com.project.lol.webview.WebViewHost
 import com.project.lol.webview.helpers.DevLogPrelude
 import com.project.lol.webview.helpers.buildAmoledJs
-import com.project.lol.webview.helpers.buildCustomCssJs
 import com.project.lol.webview.injections.LogoutCheck
 import compose.icons.TablerIcons
 import compose.icons.tablericons.Menu2
@@ -1278,7 +1277,6 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
             }
         }
 
-        val customCss = prefs.getString("CustomCss", "") ?: ""
         val amoledEnabled = prefs.getBoolean("AmoledTheme", false)
 
         webView?.let { view ->
@@ -1296,11 +1294,7 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
                 } catch(e) {}
             """.trimIndent(), null)
 
-            val js = buildString {
-                append(buildAmoledJs(amoledEnabled))
-                append(buildCustomCssJs(customCss))
-            }
-            view.evaluateJavascript(js, null)
+            view.evaluateJavascript(buildAmoledJs(amoledEnabled), null)
 
             view.evaluateJavascript(LogoutCheck.CONTENT) { result ->
                 if (result == "\"out\"") {

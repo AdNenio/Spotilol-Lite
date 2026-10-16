@@ -418,7 +418,6 @@ class SpotifyWebViewClient(
         val autoPlayMode = prefs.getString("APlayMode", "disabled") ?: "disabled"
         val closeNowPlay = prefs.getBoolean("CloseNowPlay", false)
         val amoledEnabled = prefs.getBoolean("AmoledTheme", false)
-        val customCss = prefs.getString("CustomCss", "") ?: ""
         val playerMode = prefs.getString("PlayerMode", "spotilol") ?: "spotilol"
         val debugOverlay = Logger.isEnabled()
         val takeControl = prefs.getBoolean("TakeControl", true)
@@ -433,7 +432,7 @@ class SpotifyWebViewClient(
             TAG,
             "inject: engine=$playerMode autoPlay=$autoPlayMode closeNp=$closeNowPlay amoled=$amoledEnabled " +
                 "logging=$debugOverlay takeControl=$takeControl sort=$playlistSortEnabled " +
-                "scrollbar=$showScrollbar css=${customCss.length}chars"
+                "scrollbar=$showScrollbar"
         )
 
         val js = buildString {
@@ -491,8 +490,7 @@ class SpotifyWebViewClient(
             }
         }
         val cleanJs = JsUtils.stripConsoleLogs(js) + "\n" +
-                buildAmoledJs(amoledEnabled) + "\n" +
-                buildCustomCssJs(customCss)
+                buildAmoledJs(amoledEnabled)
         if (playerMode == "original") {
             view.evaluateJavascript(cleanJs + "\n(function(){var s=document.createElement('style');s.id='spl-np-show';s.textContent='aside[data-testid=\"now-playing-bar\"]{display:flex!important}';document.head.appendChild(s);})();", null)
         } else {
@@ -539,11 +537,8 @@ class SpotifyWebViewClient(
                     val mode = prefs.getString("APlayMode", "disabled") ?: "disabled"
                     wv.evaluateJavascript("window.autoPlayMode='$mode';", null)
                 }
-                "AmoledTheme", "CustomCss" -> {
-                    val js = buildAmoledJs(prefs.getBoolean("AmoledTheme", false)) + ";\n" +
-                            buildCustomCssJs(prefs.getString("CustomCss", "") ?: "")
-                    wv.evaluateJavascript(js, null)
-                }
+                "AmoledTheme" ->
+                    wv.evaluateJavascript(buildAmoledJs(prefs.getBoolean("AmoledTheme", false)), null)
                 "TakeControl" -> {
                     val on = prefs.getBoolean("TakeControl", true)
                     wv.evaluateJavascript("window.__splTakeControl=$on;", null)

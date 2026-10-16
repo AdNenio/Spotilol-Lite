@@ -204,7 +204,6 @@ fun SettingsContent(
     var closeNowPlay by remember { mutableStateOf(prefs.getBoolean("CloseNowPlay", false)) }
     // dead code: gui mode is fixed to mobile css and js, see the appearance section
     // var guiMode by remember { mutableStateOf(prefs.getString("GuiMode", "csshack") ?: "csshack") }
-    var customCss by remember { mutableStateOf(prefs.getString("CustomCss", "") ?: "") }
     var amoledTheme by remember { mutableStateOf(amoledThemeState) }
     var swipeStop by remember { mutableStateOf(prefs.getBoolean("SwipeStop", true)) }
     var btAutoPause by remember { mutableStateOf(prefs.getBoolean("BtAutoPause", false)) }
@@ -235,7 +234,6 @@ fun SettingsContent(
     var showPlayerModeDialog by remember { mutableStateOf(false) }
     // dead code: the gui mode selector was removed, keep the flag for the wide window refactor
     // var showGuiModeDialog by remember { mutableStateOf(false) }
-    var showCustomCssDialog by remember { mutableStateOf(false) }
     var showChangelogDialog by remember { mutableStateOf(false) }
     var loggingOn by remember { mutableStateOf(Logger.isEnabled()) }
     var showDevlogDialog by remember { mutableStateOf(false) }
@@ -359,15 +357,6 @@ fun SettingsContent(
                         subtitle = stringResource(R.string.settings_gui_mode_css_js),
                         icon = TablerIcons.Palette,
                         info = stringResource(R.string.settings_gui_hack_mode_info)
-                    )
-
-                    HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-
-                    SettingTile(
-                        title = stringResource(R.string.settings_custom_css),
-                        subtitle = if (customCss.isBlank()) stringResource(R.string.settings_custom_css_none) else customCss,
-                        icon = TablerIcons.Code,
-                        onClick = { showCustomCssDialog = true }
                     )
 
                     HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
@@ -765,7 +754,6 @@ fun SettingsContent(
                         }
                     )
                 }
-
             }
 
             if (settingsTab == SettingsTab.About) {
@@ -966,6 +954,7 @@ fun SettingsContent(
         )
     }
 
+
     // dead code: gui mode selector dialog. wide window and none were never implemented,
     // the webview is always injected with the mobile css and js hack.
     // if (showGuiModeDialog) {
@@ -984,18 +973,6 @@ fun SettingsContent(
     //         onDismiss = { showGuiModeDialog = false }
     //     )
     // }
-
-    if (showCustomCssDialog) {
-        CustomCssDialog(
-            initialCss = customCss,
-            onSave = { css ->
-                customCss = css
-                prefs.edit().putString("CustomCss", css).apply()
-                showCustomCssDialog = false
-            },
-            onDismiss = { showCustomCssDialog = false }
-        )
-    }
 
     if (showClearCacheDialog) {
         ConfirmationDialog(
@@ -1357,7 +1334,6 @@ fun ProfileRow(
     }
 }
 
-
 @Composable
 fun SingleChoiceDialog(
     title: String,
@@ -1497,78 +1473,6 @@ fun LanguageDialog(
         confirmButton = {
             TextButton(onClick = onDismiss) {
                 Text(stringResource(R.string.settings_cancel), color = MaterialTheme.colorScheme.primary)
-            }
-        }
-    )
-}
-
-@Composable
-fun CustomCssDialog(
-    initialCss: String,
-    onSave: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var tempCss by remember { mutableStateOf(initialCss) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(28.dp),
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = TablerIcons.Code,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    text = stringResource(R.string.settings_custom_css),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        },
-        text = {
-            Column {
-                Text(
-                    text = stringResource(R.string.settings_custom_css_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 12.dp)
-                )
-                OutlinedTextField(
-                    value = tempCss,
-                    onValueChange = { tempCss = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(180.dp),
-                    placeholder = {
-                        Text(
-                            stringResource(R.string.settings_custom_css_placeholder),
-                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
-                        )
-                    },
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
-                    ),
-                    singleLine = false
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onSave(tempCss) }
-            ) {
-                Text(stringResource(R.string.settings_save), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.settings_cancel), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     )

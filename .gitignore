@@ -10,6 +10,9 @@
 .cxx
 local.properties
 
+# Local (machine-specific) agent notes
+AGENTS.local.md
+
 # App build
 app/build
 

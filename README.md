@@ -2,69 +2,30 @@
   <img src="art/bgwelcome.png" alt="Spotilol" style="width: 100%; max-width: 900px; margin-bottom: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.5);">
 </div>
 
-<h1 align="center">Spotilol</h1>
+<h1 align="center">Spotilol Lite</h1>
 
 <p align="center">
-  <a href="https://github.com/lyssadev/Spotilol/stargazers">
-    <img src="https://img.shields.io/github/stars/lyssadev/Spotilol?style=for-the-badge&logo=starship&labelColor=0d0d0d&color=1DB954" alt="stars"/>
-  </a>
-  &nbsp;
-  <a href="https://github.com/lyssadev/Spotilol/releases">
-    <img src="https://img.shields.io/github/downloads/lyssadev/Spotilol/total?style=for-the-badge&logo=download&labelColor=0d0d0d&color=1DB954" alt="downloads"/>
-  </a>
-  &nbsp;
-  <a href="https://github.com/lyssadev/Spotilol/releases/latest">
-    <img src="https://img.shields.io/github/v/release/lyssadev/Spotilol?style=for-the-badge&logo=github&labelColor=0d0d0d&color=1DB954" alt="version"/>
-  </a>
-  &nbsp;
-  <a href="https://github.com/lyssadev/Spotilol/forks">
-    <img src="https://img.shields.io/github/forks/lyssadev/Spotilol?style=for-the-badge&logo=git&labelColor=0d0d0d&color=1DB954" alt="forks"/>
-  </a>
-  &nbsp;
-  <a href="https://github.com/lyssadev/Spotilol/commits/main">
-    <img src="https://img.shields.io/github/last-commit/lyssadev/Spotilol?style=for-the-badge&logo=git&labelColor=0d0d0d&color=1DB954" alt="last commit"/>
-  </a>
-  &nbsp;
-  <a href="https://deepwiki.com/lyssadev/Spotilol">
-    <img src="https://deepwiki.com/badge.svg" alt="DeepWiki" style="height: 28px;"/>
-  </a>
-  &nbsp;
-  <a href="https://discord.gg/95dAE2UkqP">
-    <img src="https://img.shields.io/badge/Discord-join-1DB954?style=for-the-badge&logo=discord&logoColor=white&labelColor=0d0d0d" alt="discord"/>
-  </a>
-</p>
-
-<p align="center">
-  an Android app that wraps Spotify's web player with built-in adblocking. no root, no shady mods, just your Spotify account on a slick WebView.
-</p>
-
-<p align="center">
-  ported from smali to clean Kotlin by <strong>lyssadev</strong>, based on deviato's <strong>Spotifuck</strong>. free, open-source, and it just works.
+  A lean fork of <a href="https://github.com/lyssadev/Spotilol">Spotilol</a> — the Spotify web player in a webview, with the bloat cut out.
 </p>
 
 ---
 
+## What's different from upstream
 
+This fork strips out everything that isn't core playback:
 
-## Download
+- no Firebase (no analytics, no Crashlytics, no Performance) — nothing to configure, it just builds
+- no offline downloads (no YouTube/Innertube pipeline, no mp3/m4a transcoders)
+- no Android Auto
+- no home screen widgets
+- no third-party lyrics API (Spotify's own in-player lyrics are untouched)
+- no telemetry setting
+- no theme presets, Material You or theme sharing (one fixed dark palette, optional AMOLED blacks)
+- no lyrics styling/presets, no custom CSS
+- no system picture-in-picture
+- the update check only notifies you when a new **upstream** version exists — it never opens GitHub by itself
 
-<div align="center">
-  <a href="https://github.com/lyssadev/Spotilol/releases/latest">
-    <img src="https://img.shields.io/github/v/release/lyssadev/Spotilol?style=for-the-badge&logo=github&labelColor=0d0d0d&color=1DB954" alt="Download APK"/>
-  </a>
-</div>
-
-download the `.apk` and install it on your device. you may need to toggle **"Install from unknown sources"** in your Settings.
-
----
-
-## Preview
-
-<div align="center">
-  <img src="art/spotilol_ss1.jpg" alt="screenshot 1" width="30%" style="max-width: 250px; margin: 4px; border-radius: 12px;" />
-  <img src="art/spotilol_ss2.jpg" alt="screenshot 2" width="30%" style="max-width: 250px; margin: 4px; border-radius: 12px;" />
-  <img src="art/spotilol_ss3.jpg" alt="screenshot 3" width="30%" style="max-width: 250px; margin: 4px; border-radius: 12px;" />
-</div>
+Everything else stays like upstream: ad/telemetry blocking, media notification with lock screen and Bluetooth controls, profiles, sleep timer, AMOLED theme, in-player lyrics, canvas/video podcasts, wake lock, and the rest.
 
 ---
 
@@ -72,17 +33,14 @@ download the `.apk` and install it on your device. you may need to toggle **"Ins
 
 - blocks audio ads, trackers and telemetry
 - media notification with play, pause, skip, seek, like, shuffle and repeat
-- lock screen, Bluetooth and headset controls
-- home screen widgets for the player and album art
-- Android Auto: browse and search your library from the car
-- offline downloads via the InnerTube API, with tags and cover art
+- lock screen and Bluetooth/headset controls
 - multiple account profiles and a sleep timer
-- lyrics with five styles and a picture in picture view
-- AMOLED dark mode, Material You and accent color themes
-- custom CSS, canvas and video podcasts
+- in-player lyrics
+- AMOLED dark mode
+- canvas and video podcasts
 - mobile layout tweaks and playlist sorting
 - wake lock and power save mode
-- automatic and manual update checker
+- update notification for new upstream releases
 
 ---
 
@@ -90,44 +48,61 @@ download the `.apk` and install it on your device. you may need to toggle **"Ins
 
 - Android 9.0+ (API 28)
 - a Spotify account
-- Google Chrome / WebView (comes with your phone)
-
----
-
-## Quick Start
-
-install the APK, open it, done. no setup, no certificates, no fuss. it just works out of the box.
+- Google Chrome / webview (comes with your phone)
 
 ---
 
 ## Build It Yourself
 
 ```bash
-git clone https://github.com/lyssadev/Spotilol
-cd Spotilol
+git clone https://github.com/AdNenio/Spotilol-Lite
+cd Spotilol-Lite
 ./gradlew assembleDebug
 ```
 
-APK lands at `app/build/outputs/apk/debug/app-debug.apk`.
+The APK lands at `app/build/outputs/apk/debug/app-debug.apk`.
 
-### Google Services
+No Firebase project, no `google-services.json`, no NDK — the plain Android SDK (platform 37 + build tools) is enough.
 
-this project uses Firebase (analytics, crash reporting, performance). to build, you need:
+### Release builds
 
-1. create a Firebase project at [console.firebase.google.com](https://console.firebase.google.com)
-2. register an Android app with package name `com.project.lol`
-3. download the `google-services.json` and place it in `app/`
+Signing is read from environment variables:
+
+```bash
+export KEYSTORE_FILE="/path/to/upload-keystore.jks"
+export KEYSTORE_PASSWORD="..."
+export KEY_ALIAS="..."
+export KEY_PASSWORD="..."
+./gradlew assembleRelease
+```
+
+Or, without env vars, from `keystore/keystore.properties` (gitignored, upstream-style) with `storeFile`, `storePassword`, `keyAlias`, `keyPassword`.
 
 ---
 
-## Contributing
+## Keeping up with upstream
 
-contributions are welcome. open issues, throw PRs, suggest stuff. free for all.
+A new version is "upstream's latest release + the debloat". The full workflow — analyze the upstream diff first, rebase the fork's cut commits on top, then sweep for re-added code — lives in [AGENTS.md](AGENTS.md). The short version:
+
+```bash
+git fetch origin   # origin tracks the upstream repo
+git rebase --onto origin/main <previous base> lite
+```
+
+The fork is upstream minus deletions, so `git diff origin/main...lite` is always exactly the debloat — use it to review what the fork changes.
+
+After a sync:
+
+1. resolve conflicts in favor of the debloat (if upstream re-adds cut code, cut it again)
+2. `./gradlew assembleDebug` must pass
+3. sweep for anything upstream re-adds into the cut areas (offline downloads, Android Auto, widgets, SpicyLyrics, Firebase, theme presets, lyrics styling, custom CSS, PiP) — the full checklist and the tricky spots are in [AGENTS.md](AGENTS.md)
+4. keep `versionCode`/`versionName` equal to the upstream base version (the in-app update check compares against upstream releases and breaks on suffixes)
+5. test on a device, push, and tag `lite-X.Y.Z`
 
 ---
 
 ## Credits
 
-**deviato** reverse-engineered the original Spotifuck. **lyssadev** ported the core logic from smali to Kotlin and maintains this project.
+**deviato** reverse-engineered the original Spotifuck. **lyssadev** ported the core logic from smali to Kotlin and maintains Spotilol. This repo is a personal fork for my own use case.
 
-all rights reserved. lyssadev and deviato.
+All rights reserved. lyssadev and deviato.
